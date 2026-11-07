@@ -106,7 +106,10 @@ namespace idm
 // time-and-space half, so a board still reads at a glance with only the skin's two accents.
 inline juce::Colour accentForCategory (const juce::String& category)
 {
-    if (category == "TIME" || category == "SPACE" || category == "MOD")
+    // Registry categories are lower case ("modulation") and the board shows them upper case: compare either way.
+    const auto c = category.toUpperCase();
+
+    if (c == "TIME" || c == "SPACE" || c == "MOD" || c == "MODULATION")
         return idm::green();
 
     return idm::pink();

@@ -20,6 +20,9 @@
 #include "Effects/adapters/PumpEqAdapter.h"
 #include "Effects/adapters/PumpTwangAdapter.h"
 #include "Effects/adapters/PumpTubeAdapter.h"
+#include "Effects/adapters/PumpTuneAdapter.h"
+#include "Effects/adapters/PumpVoxAdapter.h"
+#include "Effects/adapters/PumpGrumbleAdapter.h"
 
 namespace pb
 {
@@ -192,5 +195,32 @@ void registerBuiltInEffects (EffectRegistry& registry)
     twang.create = [] { return std::make_unique<PumpTwangAdapter>(); };
 
     registry.add (std::move (twang));
+
+    // The three voice pedals share a category of their own: TUNE, VOX and GRUMBLE all want a single voice (or a
+    // guitar played like one) on the input, and none of them fits "modulation" or "filter" as the picker groups
+    // them. VOX and GRUMBLE are creative voice processors; TUNE is the corrective one, and it sits with them.
+    EffectDescriptor tune;
+    tune.typeId = PumpTuneAdapter().typeId();
+    tune.displayName = PumpTuneAdapter().displayName();
+    tune.category = "voice";
+    tune.create = [] { return std::make_unique<PumpTuneAdapter>(); };
+
+    registry.add (std::move (tune));
+
+    EffectDescriptor vox;
+    vox.typeId = PumpVoxAdapter().typeId();
+    vox.displayName = PumpVoxAdapter().displayName();
+    vox.category = "voice";
+    vox.create = [] { return std::make_unique<PumpVoxAdapter>(); };
+
+    registry.add (std::move (vox));
+
+    EffectDescriptor grumble;
+    grumble.typeId = PumpGrumbleAdapter().typeId();
+    grumble.displayName = PumpGrumbleAdapter().displayName();
+    grumble.category = "voice";
+    grumble.create = [] { return std::make_unique<PumpGrumbleAdapter>(); };
+
+    registry.add (std::move (grumble));
 }
 } // namespace pb

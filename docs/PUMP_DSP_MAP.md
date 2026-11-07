@@ -50,7 +50,7 @@ Notes that matter for `IEffect`:
 ## Every effect
 
 `separable?` is judged from the engine header's includes and entry points, not by trying to link yet. Only the three
-Phase 1 effects are compiled into our build; CRUSH, SWIRL, COMP, HEAT, TONE, VERB, LIMIT, SNAP, STRIP, CALM, GATE, GRAIN, STUTTER, CHOP, WIDE, BAND and EQ joined them in
+Phase 1 effects are compiled into our build; CRUSH, SWIRL, COMP, HEAT, TONE, VERB, LIMIT, SNAP, STRIP, CALM, GATE, GRAIN, STUTTER, CHOP, WIDE, BAND, EQ, TWANG, TUNE, VOX and GRUMBLE joined them in
 phase 5 (cards 5.1-5.24). pffft is linked, which unblocks every FFT-based pedal still on this map. The rest are
 mapped. WOB looks like an effect on the list but is an instrument (it needs MIDI note events), so it is not one.
 
@@ -73,8 +73,9 @@ mapped. WOB looks like an effect on the list but is an instrument (it needs MIDI
 | SPRING | `SpringEngine.hpp` | `SpringParams.hpp` | **yes — compiled** | also exposes `kick()`, scope rings and meters |
 | VERB | `VerbEngine.hpp` + `VerbDsp.hpp` | `VerbParams.hpp` | **yes — compiled** | 12 modes, zero latency; pre-delay sync needs a tempo (fixed 120 BPM for now) |
 | GRAIN | `GrainEngine.hpp` | `GrainParams.hpp` | **yes — compiled** | granular, zero latency; tempo sync free-runs at 120 BPM |
-| VOX | `VoxEngine.hpp` + `VoxFx.hpp` | `VoxParams.hpp` | yes | needs a carrier / MIDI sidechain (not in v1) |
-| TUNE | `TuneEngine.hpp` | `TuneParams.hpp` | yes | MIDI note input (not in v1) |
+| VOX | `VoxEngine.hpp` + `VoxFx.hpp` | `VoxParams.hpp` | **yes — compiled** | two engines behind one ENGINE switch: the vocoder (route fixed to Synth carrier; no sidechain bus in a slot) and VOICE FX. "Held note" source = the adapter sends the synth a note-on itself (no MIDI input); Follow/chord/key/scale kept. Engine/mode/FFT size move the latency (0, FFT size, or ~24 ms) so they wait for input silence. Left out: Sidechain carrier, Sidechain voice, Split L/R, MIDI source, Auto |
+| TUNE | `TuneEngine.hpp` | `TuneParams.hpp` | **yes — compiled** | automatic correction in LIVE mode only: key/scale/retune/amount/humanize/flex/vibrato/transpose, formant, four harmonies (Scale/Fixed). ~19 ms PSOLA latency. Left out: MIDI notes, GRAPH mode (note editor + timeline), RANGE (reconfiguring allocates in `setSettings`; fixed to Mid) |
+| GRUMBLE | `GrumbleEngine.hpp` | `GrumbleParams.hpp` | **yes — compiled** | creature voice: four layers (BEAST/SPLIT/GROWL/SWARM) on a morph pad (`morph_x`, `morph_y` both exposed), gate, drive, tone, cave, mix; ~24 ms PSOLA latency, mix dry path aligned; nothing left out (no MIDI, no sidechain). Not in the original effect list: it arrived after the first mapping |
 | CRUSH | `CrushEngine.hpp` | `CrushParams.hpp` | **yes — compiled** | 6 ms media transport: real latency, reported but not compensated |
 | SWIRL | `SwirlEngine.hpp` | `SwirlParams.hpp` | **yes — compiled** | zero latency except 3 ms in the flanger's THRU-0; takes a `pump::Transport` |
 | STUTTER | `StutterEngine.hpp` | `StutterParams.hpp` | **yes — compiled** | needs tempo (120 BPM); pump's eight move toggles are not parameters |
