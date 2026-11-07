@@ -727,3 +727,11 @@ Scaffold headers touched: `Slot.h` (makeSuccessor, ownsRegistrations, preparedBl
   `Resources/icon.svg` → `Resources/icon-1024.png` (rendered with Chromium so the label uses JetBrains Mono Bold),
   set as `ICON_BIG` in `CMakeLists.txt`; JUCE builds the .icns from it.
 - Verified: 3212 expectations pass on Linux. The icon's look in the Dock and the startup fix on the Neo are not.
+- Release-only test failure (CI on the Mac, reproduced on Linux): WIDE's "two bands, balanced" null test was off by
+  ~-25 dBFS. Not the NaN change and not a bug in the board: the linear-phase crossover (WIDE, and BAND/HEAT too)
+  gets its kernels from each engine's own **worker thread**, so the adapter's engine and the reference engine
+  swapped kernels a block or two apart and the comparison raced them (Release is fast enough to lose). The three
+  null harnesses now `settleOnSilence` both engines (0.5 s of silence with real time for the workers) before
+  comparing; WIDE/BAND/HEAT null to exactly 0 in Debug and Release. pump's `PUMP_SYNC_KERNELS` would also fix it but
+  moves kernel design onto the audio thread, so it is not used.
+- `PumpBoardTests <name>` now runs only the suites whose name contains `<name>` (e.g. `PumpBoardTests WideNull`).

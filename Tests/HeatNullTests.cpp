@@ -42,6 +42,24 @@ void fillSignal (juce::AudioBuffer<float>& buffer, int startSample, juce::Random
     }
 }
 
+// Linear-phase crossovers get their kernels from each engine's own worker thread, so two engines told the same
+// settings can swap kernels a block or two apart. Compared straight away, the test races those threads (it failed
+// in Release on 7 Nov 2026, -25 dBFS, while passing in Debug). Both engines run on silence first, with real time
+// for the workers, so they start the comparison on the same kernels with the same (silent) state.
+template <class Adapter, class Reference>
+void settleOnSilence (Adapter& adapter, Reference& reference, int blockSize)
+{
+    for (int done = 0, k = 0; done < 24000 || k < 40; done += blockSize, ++k)
+    {
+        juce::AudioBuffer<float> a (2, blockSize), b (2, blockSize);
+        a.clear();
+        b.clear();
+        adapter.process (a);
+        reference.process (b.getWritePointer (0), b.getWritePointer (1), blockSize);
+        juce::Thread::sleep (2);
+    }
+}
+
 float runNull (int blockSize, const std::function<void (PumpHeatAdapter&)>& tweak)
 {
     PumpHeatAdapter adapter;
@@ -56,6 +74,8 @@ float runNull (int blockSize, const std::function<void (PumpHeatAdapter&)>& twea
     pump::heat::Engine reference;
     reference.prepare (kRate, blockSize);
     applyLikeAdapter (adapter, reference);
+
+    settleOnSilence (adapter, reference, blockSize);
 
     juce::Random adapterRng (0x4EA7u), referenceRng (0x4EA7u);
     float worst = 0.0f;

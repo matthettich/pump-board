@@ -295,6 +295,10 @@ cmake --build build --target PumpBoard
 xvfb-run -a "build/PumpBoard_artefacts/Debug/pump BOARD" --render-slots slots.png 1.5
 ```
 
+Run one suite with `PumpBoardTests WideNull` (any part of the suite name). Always check a **Release** build too
+(`cmake -B build-rel -DCMAKE_BUILD_TYPE=Release ...`): CI builds Release, and timing-dependent tests (the linear-phase
+splitters' worker threads) have passed in Debug and failed in Release before.
+
 GCC warns about a few things Apple clang does not (`-Wshadow` in tests, `-Waddress`); the zero-warning rule is
 judged on the Mac build.
 

@@ -23,13 +23,30 @@ public:
 SmokeTest smokeTest;
 } // namespace
 
-int main()
+// `PumpBoardTests` runs everything; `PumpBoardTests WideNull` runs only the suites whose name contains "WideNull"
+// (handy under valgrind, or to chase one failure).
+int main (int argc, char* argv[])
 {
     juce::ScopedJuceInitialiser_GUI juceInitialiser;
 
     juce::UnitTestRunner runner;
     runner.setAssertOnFailure (false);
-    runner.runAllTests();
+
+    if (argc > 1)
+    {
+        const juce::String filter (argv[1]);
+        juce::Array<juce::UnitTest*> chosen;
+
+        for (auto* test : juce::UnitTest::getAllTests())
+            if (test->getName().containsIgnoreCase (filter))
+                chosen.add (test);
+
+        runner.runTests (chosen);
+    }
+    else
+    {
+        runner.runAllTests();
+    }
 
     int totalFailures = 0;
     int totalPasses = 0;
