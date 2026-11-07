@@ -40,6 +40,9 @@ set(PUMP_DSP_SOURCES
     ${CMAKE_SOURCE_DIR}/external/pump/plugins/coil/CoilEngine.hpp
     ${CMAKE_SOURCE_DIR}/external/pump/plugins/coil/CoilDsp.hpp
     ${CMAKE_SOURCE_DIR}/external/pump/plugins/coil/CoilParams.hpp
+    ${CMAKE_SOURCE_DIR}/external/pump/plugins/tune/TuneEngine.hpp
+    ${CMAKE_SOURCE_DIR}/external/pump/plugins/vox/VoxEngine.hpp
+    ${CMAKE_SOURCE_DIR}/external/pump/plugins/grumble/GrumbleEngine.hpp
     # HEAT's linear-phase splitter goes through pump's RealFFT, which is pffft; every plugin ships its own copy
     # of this one C file (card 5.7). One is enough for the whole app.
     ${CMAKE_SOURCE_DIR}/external/pump/plugins/heat/pffft.c)
@@ -65,7 +68,10 @@ set(PUMP_DSP_INCLUDES
     ${CMAKE_SOURCE_DIR}/external/pump/plugins/wide
     ${CMAKE_SOURCE_DIR}/external/pump/plugins/band
     ${CMAKE_SOURCE_DIR}/external/pump/plugins/eq
-    ${CMAKE_SOURCE_DIR}/external/pump/plugins/coil)
+    ${CMAKE_SOURCE_DIR}/external/pump/plugins/coil
+    ${CMAKE_SOURCE_DIR}/external/pump/plugins/tune
+    ${CMAKE_SOURCE_DIR}/external/pump/plugins/vox
+    ${CMAKE_SOURCE_DIR}/external/pump/plugins/grumble)
 
 file(GLOB_RECURSE PB_CORE_SOURCES CONFIGURE_DEPENDS
     Source/Common/*.cpp
