@@ -1,0 +1,6 @@
+[submodule "external/JUCE"]
+	path = external/JUCE
+	url = https://github.com/juce-framework/JUCE
+[submodule "external/pump"]
+	path = external/pump
+	url = https://github.com/matthettich/pump

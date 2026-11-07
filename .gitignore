@@ -1,4 +1,5 @@
 build/
+# JUCE and pump are submodules (see .gitmodules): their contents are never tracked here.
 external/
 *.log
 .DS_Store
