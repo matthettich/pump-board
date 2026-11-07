@@ -11,7 +11,7 @@ decision and deviation — read it before changing anything, it is where the tra
   mappings, and the app can be played: sixteen slots, eight macros, MIDI and key mappings, presets with
   program changes, and a measured round trip in Settings. What is left is hand-testing
   (`REVIEW_TEMPLATE.md`) and phases 5–7 (more pedals, custom pedals, the full skin).
-- **Tests:** 3212 expectations in Debug, 0 failing. Last run: 6 Nov 2026 on **Linux** in a cloud
+- **Tests:** 3216 expectations in Debug, 0 failing. Last run: 6 Nov 2026 on **Linux** in a cloud
   session (see "Building on Linux" below) — not yet re-run on the Neo.
 - **Latest pass (6 Nov 2026):** a senior-style review fixed a use-after-free on pedal swap/remove/device change,
   stale mappings after a pedal goes, empty slots vanishing on load, a click when a latency pedal is switched off,
@@ -37,7 +37,7 @@ cmake --build build
 ```
 
 ```bash
-./build/PumpBoardTests_artefacts/Debug/PumpBoardTests          # 3212 expectations
+./build/PumpBoardTests_artefacts/Debug/PumpBoardTests          # 3216 expectations
 open "build/PumpBoard_artefacts/Debug/pump BOARD.app"          # or double-click it in Finder
 ```
 
@@ -277,9 +277,12 @@ last `NOTES.md` entries. Left:
    (`Common/Sanitize.h`), and a NaN a pedal makes is stopped at its own output, but that pedal's state stays
    poisoned. A watchdog could notice repeated scrubs from one slot and rebuild its pedal from the message thread
    via `Slot::makeSuccessor`, carrying its param values over (and keeping its mappings valid).
-6. **Not on the board, on purpose:** METER and MASTER (owner's call), ROOM (system correction, not a pedal), the
+6. **For the pump repo, not here:** GRUMBLE's engine keeps the mono sum as its dry signal, so its MIX collapses a
+   stereo input to mono (CodeRabbit, PR #1). Fine for a guitar board; fix in pump if GRUMBLE is used on stereo
+   sources, then bump the submodule.
+7. **Not on the board, on purpose:** METER and MASTER (owner's call), ROOM (system correction, not a pedal), the
    synths (no MIDI into slots), MACHINE (GPL, house rule).
-7. **JUCE licence.** JUCE is AGPLv3 or commercial. Fine for personal use; if pump BOARD is ever sold or shipped
+8. **JUCE licence.** JUCE is AGPLv3 or commercial. Fine for personal use; if pump BOARD is ever sold or shipped
    closed-source, a commercial JUCE licence is needed.
 
 ## Building on Linux (cloud agents)

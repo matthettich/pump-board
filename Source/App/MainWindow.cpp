@@ -461,6 +461,14 @@ private:
         if (slot == nullptr)
             return;
 
+        // An armed or pending learn may be aimed at one of the indices about to be freed and reused: cancel it, or the
+        // next MIDI message would commit a mapping onto whatever pedal takes that index (CodeRabbit, PR #1).
+        if (learn.isLearning() || learn.hasPendingSource())
+        {
+            learn.cancelLearn();
+            editor.setLearnTarget (ParameterRegistry::kInvalid);
+        }
+
         const auto& gone = slot->paramIndices();
         const auto isGone = [&gone] (int paramIndex)
         {

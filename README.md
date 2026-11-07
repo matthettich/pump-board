@@ -58,7 +58,7 @@ open "build/PumpBoard_artefacts/Debug/pump BOARD.app"
 ## Tests
 
 ```bash
-./build/PumpBoardTests_artefacts/Debug/PumpBoardTests     # 3212 expectations, 0 failing
+./build/PumpBoardTests_artefacts/Debug/PumpBoardTests     # 3216 expectations, 0 failing
 ```
 
 The suite covers the engine, the router, macros, presets, every adapter's null test against pump's engine, and
@@ -98,5 +98,5 @@ Everything lives in `~/Music/pump BOARD/`: `current.board` (the working copy, re
 ## Licence
 
 No licence has been chosen for this repository yet, so it is not offered for reuse. Third-party code keeps its
-own terms: JUCE (`external/JUCE/LICENSE.md`), pump (`external/pump/LICENSE`), and the three Bitstream Vera /
-Share Tech Mono faces compiled into the app (`SIL OFL`, licences shipped in the app bundle's `Resources`).
+own terms: JUCE (`external/JUCE/LICENSE.md`), pump (`external/pump/LICENSE`), and JetBrains Mono Regular and
+Bold, the only faces compiled into the app (`SIL OFL`, licence shipped in the app bundle's `Resources`).

@@ -217,7 +217,7 @@ bool MidiRouter::handleKey (int keyCode, bool isDown, ControlEvent& presetEvent)
 void MidiRouter::handle (const juce::MidiBuffer& midi) noexcept
 {
     if (auto* state = stateFor (this))
-        state->blocksProcessed.fetch_add (1, std::memory_order_relaxed);
+        state->blocksProcessed.fetch_add (1, std::memory_order_acq_rel);   // releases this block's table reads (retire GC)
 
     if (! learning.load (std::memory_order_relaxed) && active.load (std::memory_order_acquire) == nullptr)
         return;                                  // nothing mapped and nothing to learn: the common case, free

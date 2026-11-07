@@ -170,6 +170,10 @@ void BoardProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiB
     // Card 2.4: anything that allocates from here down is counted in Debug builds and must stay at zero.
     [[maybe_unused]] const pb::alloc::Scope allocationScope;   // empty without PB_ALLOCATION_GUARD
 
+    // The publish counter first: publish() swaps `active` before it bumps the counter, so a new count read here
+    // guarantees the load below sees the new chain. Read the other way round, a publish landing between the two loads
+    // pushed the tempo to the old chain and marked the new one as served (CodeRabbit, PR #1).
+    const auto published = publishCount.load (std::memory_order_acquire);
     const ChainSnapshot* snapshot = active.load (std::memory_order_acquire);
     // Release, not relaxed: the message thread's acquire load of this counter is what proves the previous block's
     // reads of an old snapshot are finished (on Apple silicon a relaxed increment does not order them).
@@ -192,7 +196,7 @@ void BoardProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiB
         // A new chain (a pedal inserted, swapped or a board loaded) gets the tempo too: a tempo-aware pedal starts
         // at its own 120 BPM and would otherwise stay there until the tempo next moved.
         // (A counter rather than the pointer: a new snapshot can be allocated where a freed one used to be.)
-        if (const auto published = publishCount.load (std::memory_order_acquire); published != lastTempoPublish)
+        if (published != lastTempoPublish)
         {
             lastTempoPublish = published;
             lastTempo = -1.0;

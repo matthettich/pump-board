@@ -735,3 +735,23 @@ Scaffold headers touched: `Slot.h` (makeSuccessor, ownsRegistrations, preparedBl
   comparing; WIDE/BAND/HEAT null to exactly 0 in Debug and Release. pump's `PUMP_SYNC_KERNELS` would also fix it but
   moves kernel design onto the audio thread, so it is not used.
 - `PumpBoardTests <name>` now runs only the suites whose name contains `<name>` (e.g. `PumpBoardTests WideNull`).
+
+## 2026-11-07 — CodeRabbit review (PR #1, review-only) — verified and fixed
+PR #1 (`main` against `review/base-2026-11-06` at 885e57e) exists only so CodeRabbit could review this work; it is
+not for merging. Every finding was checked against the code before changing anything:
+- **Learn survived its pedal** (MainWindow): `forgetPedalParams` now cancels an armed/pending learn, which could
+  otherwise commit a mapping onto whatever pedal reused the freed index. Fixed.
+- **MidiRouter's block counter was relaxed** — the same retire-GC ordering bug fixed in BoardProcessor yesterday.
+  Now acq_rel. Fixed.
+- **Tempo push could miss a new chain**: `publishCount` was read after `active`, so a publish between the two
+  loads pushed the tempo to the old chain and marked the new one served. Counter is read first now. Fixed.
+- **TUBE's waiting oversampling leaked into ordinary pushes** (a DRIVE turn mid-note switched it, latency jumped).
+  Pushes now carry the engine's current oversampling until silence. While fixing it: the adapter compared the menu
+  index (0..3) with pump's `engine.oversampling()`, which is the *factor* (1, 2, 4, 8) — never equal, so a switch
+  looked pending on every block. `engineOversamplingIndex()` converts. Two new tests in TubeOversamplingTests (the
+  first fails without the fix).
+- README licence paragraph named fonts the app no longer ships. Fixed.
+- **Not fixed here (pump's code):** GRUMBLE's engine keeps the *mono sum* as its dry signal, so at MIX below 100 a
+  stereo input collapses to mono. Harmless on a guitar board (the input is mono and the board folds it to both
+  sides), but it belongs in pump: noted in HANDOVER.
+- Verified: 3216 expectations (Debug), 3148 (Release) on Linux.

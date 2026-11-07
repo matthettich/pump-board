@@ -96,7 +96,7 @@ void PumpTubeAdapter::setParam (int index, float value) noexcept
             const bool changed = settings.oversampling != requested;
             settings.oversampling = requested;          // the choice is kept either way, so a save remembers it
 
-            if (prepared && requested != engine.oversampling())
+            if (prepared && requested != engineOversamplingIndex())
             {
                 pendingOversampling = requested;        // into force at the next silence
             }
@@ -140,7 +140,15 @@ void PumpTubeAdapter::process (juce::AudioBuffer<float>& buffer) noexcept
 
     if (dirty)
     {
-        engine.setSettings (settings);   // block start, as pump's engine expects
+        // A waiting oversampling change stays out of ordinary pushes: a DRIVE turn mid-note must not carry it into
+        // the engine early (its latency would jump while playing). The engine keeps what it runs until the silence
+        // above lets the request through (CodeRabbit, PR #1).
+        auto pushed = settings;
+
+        if (pendingOversampling >= 0)
+            pushed.oversampling = engineOversamplingIndex();
+
+        engine.setSettings (pushed);     // block start, as pump's engine expects
         dirty = false;
     }
 

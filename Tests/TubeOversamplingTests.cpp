@@ -58,6 +58,45 @@ public:
             expectEquals (adapter.currentSettings().oversampling, 3);   // the request is remembered
         }
 
+        beginTest ("another knob turned while a switch is waiting does not carry it in early (CodeRabbit, PR #1)");
+        {
+            pb::PumpTubeAdapter adapter;
+            adapter.prepare (kRate, kBlock, 2);
+            run (adapter, 8, 0.2f);
+
+            const int before = adapter.latencySamples();
+            adapter.setParam (kOversampling, 3.0f);    // waits for silence
+            run (adapter, 4, 0.2f);
+
+            for (int i = 0; i < 6; ++i)                // DRIVE moving while playing marks the settings dirty
+            {
+                adapter.setParam (1, 14.0f + (float) i);
+                run (adapter, 4, 0.2f);
+            }
+
+            expectEquals (adapter.latencySamples(), before);
+
+            run (adapter, 16, 0.0f);                   // and silence still lets it through
+            expect (adapter.latencySamples() != before);
+        }
+
+        beginTest ("asking for the oversampling already running is not a pending switch");
+        {
+            pb::PumpTubeAdapter adapter;
+            adapter.prepare (kRate, kBlock, 2);
+            run (adapter, 8, 0.2f);
+            const int before = adapter.latencySamples();
+
+            adapter.setParam (kOversampling, 3.0f);    // ask for 8x...
+            run (adapter, 2, 0.2f);
+            adapter.setParam (kOversampling, 2.0f);    // ...and back to the 4x it runs: nothing should wait now
+            run (adapter, 4, 0.2f);
+            run (adapter, 16, 0.0f);
+
+            expectEquals (adapter.latencySamples(), before);
+            expectEquals (adapter.currentSettings().oversampling, 2);
+        }
+
         beginTest ("it applies once the input has been silent, so the switch lands between phrases");
         {
             pb::PumpTubeAdapter adapter;
