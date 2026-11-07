@@ -138,7 +138,7 @@ void BoardProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiB
     juce::ScopedNoDenormals noDenormals;
 
     // Card 2.4: anything that allocates from here down is counted in Debug builds and must stay at zero.
-    const pb::alloc::Scope allocationScope;
+    [[maybe_unused]] const pb::alloc::Scope allocationScope;   // empty without PB_ALLOCATION_GUARD
 
     const ChainSnapshot* snapshot = active.load (std::memory_order_acquire);
     blocksProcessed.fetch_add (1, std::memory_order_relaxed);
