@@ -46,10 +46,23 @@ void PluginProcessor::prepareToPlay (double sampleRate, int maximumExpectedSampl
     setLatencySamples (reportedLatency);
 
     // Card 8.2: the board is edited from the message thread and snapshots are retired at N+2 blocks, so something
-    // has to run collectGarbage() even when no editor is open. A host prepares on its message thread; if one did
-    // not, the timer is simply not started rather than started from the wrong thread.
+    // has to run collectGarbage() even when no editor is open. Most hosts prepare on their message thread; one that
+    // prepares on a worker thread gets the timer started for it, on the right thread, through a weak reference so a
+    // processor destroyed in the meantime is not touched (CodeRabbit, PR #2).
     if (juce::MessageManager::existsAndIsCurrentThread())
+    {
         startTimerHz (30);
+    }
+    else
+    {
+        juce::WeakReference<PluginProcessor> safeThis (this);
+
+        juce::MessageManager::callAsync ([safeThis]
+        {
+            if (safeThis != nullptr)
+                safeThis->startTimerHz (30);
+        });
+    }
 }
 
 void PluginProcessor::releaseResources()
@@ -98,10 +111,16 @@ void PluginProcessor::beginStateRestore (const juce::var& state)
     }
 
     // Otherwise the board's own bypass smoother is the fade: bypass, swap, unbypass. A second restore while one is
-    // waiting replaces it, as two quick program changes do in the app.
+    // waiting replaces the first, as two quick program changes do in the app — but it must not take the bypass state
+    // over: the board was bypassed for the first restore, so reading it again would record "leave it bypassed" and
+    // the board would never come back (CodeRabbit, PR #2).
+    const bool alreadyWaiting = ! pendingState.isVoid();
     pendingState = state;
     pendingStateDueMs = juce::Time::currentTimeMillis() + kStateFadeMs;
-    pendingStateUnbypass = ! session.isBoardBypassed();
+
+    if (! alreadyWaiting)
+        pendingStateUnbypass = ! session.isBoardBypassed();
+
     session.setBoardBypassed (true);
 }
 

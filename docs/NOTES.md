@@ -780,9 +780,10 @@ board, as in the app), `processBlock` straight into `BoardProcessor`, no editor 
 - The processor and session live in a `PumpBoardPluginSupport` static library so `PumpBoardTests` can drive them;
   only `createPluginFilter` stays in the bundle. `CMakeLists.txt` no longer globs `Source/Plugin/*.cpp`, so the entry
   point cannot end up in the test binary.
-- CodeRabbit (PR #2) asked whether automation follows the slot or the pedal after an insertion. Settled in the plan:
-  automation follows the slot, because a fixed parameter list is what hosts accept and a lane must keep naming the
-  same position; the pedal keeps its own settings and its lane moves with it.
+- CodeRabbit (PR #2) asked whether automation follows the slot or the pedal after an insertion. Settled in the plan for card 8.4,
+  which does the work (nothing is automated yet): automation follows the slot, because a fixed parameter list is what hosts accept and a lane must keep naming the
+  same position; the pedal keeps its own settings and is then driven by the lane at its new
+  position.
 - Verified: all five new or changed sources pass `g++ -std=c++20 -fsyntax-only -Wall -Wextra -Werror` against the
   pinned JUCE headers. Not verified: the build itself, the unit tests and a host load — this machine has no cmake,
   no freetype/X11 headers and is Linux, so the `plugin` CI job is the first real check.

@@ -154,7 +154,7 @@ settings move with the pedal, its automation lane does not.
 
 **Check:** automation written by the host reaches the registry; a registry write from the UI is seen by the host
 once; a full automation pass allocates zero times; inserting at position 3 keeps `slot/3/on` naming position 3 (the
-new pedal), while the pedal that moved keeps its settings and its own lane moves with its position.
+new pedal), the pedal that moved keeps its own settings, and the lane that drives it is the one at its new position.
 
 ---
 
@@ -195,8 +195,9 @@ editor; closing the editor during a pending bypass swap and during a preset load
 `Tests/PluginHostSyncTests.cpp` (new).
 
 Tempo: read `getPlayHead()` once per block; when the host reports a BPM, write it to `board/tempo` and make the
-header field read-only. When it does not, fall back to the field and to MIDI clock as today. Do not let two
-sources fight: a host BPM always wins over a MIDI clock.
+header field read-only while that lasts. When the host stops reporting one, the field becomes editable again and
+it, MIDI clock and the saved state are the fallback. Do not let two sources fight: a host BPM always wins over a
+MIDI clock.
 
 Latency: report the chain's summed `latencySamples()` through `getLatencySamples()`. When a pedal is added,
 removed, swapped or switched in a way that changes the total, hold the change until the input has been silent,
@@ -239,8 +240,8 @@ is holding.
 Hosts are less polite than a single CoreAudio device. Prepare and process at 44.1, 48, 88.2 and 96 kHz; blocks of
 0, 1, 7, 64, 128, 511, 1024 and 4096; mono-in/stereo-out and stereo-in/stereo-out; silent, full-scale and
 non-finite input. `Slot::process` already passes dry rather than overrunning when a block exceeds what it was
-prepared for, and `prepareToPlay` must call `BoardModel::prepareAll()` so the prepared block is the host's
-maximum, not the last device's 64.
+prepared for, and `prepareToPlay` must call `BoardModel::prepareAllForHost()` so the prepared block is the host's
+maximum, not the last device's 64, and so preparing does not wait for audio that is not running.
 
 Double-precision processing stays off.
 

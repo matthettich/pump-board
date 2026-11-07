@@ -83,16 +83,16 @@ public:
             expectEquals (session.getProcessor().getMaxBlock(), 1024);
         }
 
-        beginTest ("a session that is destroyed with a fresh insert pending does not crash");
+        beginTest ("a session destroyed with a fresh insert pending completes");
         {
-            // publish() retires the previous snapshot at N+2 blocks; with no blocks running, destruction has to
-            // free both chains itself, and this is the case a host hits when a project is closed while loading.
+            // A smoke test, not a leak check: publish() retires the previous snapshot at N+2 blocks, and with no
+            // blocks running destruction has to free both chains itself. Getting that wrong would crash here; a leak
+            // would be reported when the test binary exits, not by this block.
             auto session = std::make_unique<pb::PluginSession>();
             session->prepare (48000.0, 128);
             session->loadDefaultBoard();
             session->getModel().insert (0, "pump.verb");
             session.reset();
-            expect (true);
         }
     }
 

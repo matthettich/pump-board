@@ -2,6 +2,7 @@
 #include "Effects/EffectRegistry.h"
 #include "Presets/BoardSerializer.h"
 #include "Presets/BoardState.h"
+#include <mutex>
 
 namespace pb
 {
@@ -17,13 +18,20 @@ constexpr const char* kStateTempoKey = "tempo";
 constexpr const char* kStateTempoId = "board/tempo";
 constexpr int kStateVersion = 1;
 // Two plugin instances share one process, and one registry: registering the pedals twice would assert on the second
-// instance's load. Checking first is also what lets the test binary register them itself if it wants to.
+// instance's load, and two instances can be created at once on different threads. call_once makes that one decision
+// however many hosts race to load the plugin; the contains check stays inside it so a test binary that registered
+// the pedals itself is still respected (CodeRabbit, PR #2).
 void ensureBuiltInEffects()
 {
-    auto& registry = EffectRegistry::instance();
+    static std::once_flag once;
 
-    if (! registry.contains ("pump.tube"))
-        registerBuiltInEffects (registry);
+    std::call_once (once, []
+    {
+        auto& registry = EffectRegistry::instance();
+
+        if (! registry.contains ("pump.tube"))
+            registerBuiltInEffects (registry);
+    });
 }
 } // namespace
 

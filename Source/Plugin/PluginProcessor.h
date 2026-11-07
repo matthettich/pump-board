@@ -56,5 +56,9 @@ private:
 
     int tempoIndex = ParameterRegistry::kInvalid;
     int reportedLatency = 0;
+
+    // A host may prepare on another thread; the timer has to be started on this one, and this is what lets the
+    // message thread check the processor is still alive before touching it.
+    JUCE_DECLARE_WEAK_REFERENCEABLE (PluginProcessor)
 };
 } // namespace pb

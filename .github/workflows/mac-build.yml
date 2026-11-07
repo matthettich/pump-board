@@ -9,8 +9,10 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Only the publish job needs a write token; the build and plugin jobs, and so everything a pull request runs, see
+# read only (CodeRabbit, PR #2).
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   # Per ref, so a pull request cannot cancel a release build of main.
@@ -59,8 +61,20 @@ jobs:
           name: pump-BOARD-mac-arm64
           path: pump-BOARD-mac-arm64.zip
 
+  # Publishing is the only thing that needs a write token, so it is its own job. Keeping it out of the build job is
+  # what lets every pull request run with contents: read.
+  publish:
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: pump-BOARD-mac-arm64
+
       - name: Publish as the "latest" release
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
