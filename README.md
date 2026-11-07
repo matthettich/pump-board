@@ -56,7 +56,7 @@ open "build/PumpBoard_artefacts/Debug/pump BOARD.app"
 
 The suite covers the engine, the router, macros, presets, every adapter's null test against pump's engine, and
 the allocation guard. A plain configure (no `-DCMAKE_BUILD_TYPE=Debug`) runs fewer: `AllocationGuardTests` and the new pedals' allocation checks
-are `#ifdef PB_ALLOCATION_GUARD`, so their 20 expectations only exist in Debug. Both configurations should
+are `#ifdef PB_ALLOCATION_GUARD`, so those expectations only exist in Debug. Both configurations should
 build with **zero warnings** in `Source/` and `Tests/`; pump's and JUCE's headers warn and are left alone.
 
 ## Offscreen renders
