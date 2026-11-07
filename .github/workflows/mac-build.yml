@@ -1,17 +1,20 @@
 # Builds pump BOARD for Apple silicon on every push to main and publishes the app as the "latest" release,
 # so there is always a build to download and try. Unsigned: first launch needs right-click > Open (see README).
+# Pull requests build and test the app but never publish it.
 name: Mac build
 
 on:
   push:
     branches: [main]
+  pull_request:
   workflow_dispatch:
 
 permissions:
   contents: write
 
 concurrency:
-  group: mac-build
+  # Per ref, so a pull request cannot cancel a release build of main.
+  group: mac-build-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -57,6 +60,7 @@ jobs:
           path: pump-BOARD-mac-arm64.zip
 
       - name: Publish as the "latest" release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -65,3 +69,50 @@ jobs:
             --title "Latest build ($(date -u +%Y-%m-%d) ${GITHUB_SHA::7})" \
             --notes "Built from ${GITHUB_SHA} on Apple silicon (Release). Unsigned: right-click > Open the first time." \
             --target "$GITHUB_SHA"
+
+  # Card 8.1: the plugin target is verified where it can actually be built. A separate job, so a plugin failure
+  # can never stop the app's release and "additional software" stays additional.
+  plugin:
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+          fetch-depth: 1
+
+      - name: Tools
+        run: brew install ninja || true
+
+      - name: Configure (Release)
+        run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build both formats
+        run: |
+          set -o pipefail
+          cmake --build build --target PumpBoardPlugin_VST3 PumpBoardPlugin_AU 2>&1 | tee plugin.log || {
+            grep -E "error:|Error|FAILED" plugin.log | head -15 | while IFS= read -r line; do echo "::error title=plugin build::${line}"; done
+            exit 1; }
+          # Do not trust the artefact layout: find what the build actually produced.
+          for kind in "pump BOARD.vst3" "pump BOARD.component"; do
+            found=$(find build/PumpBoardPlugin_artefacts -maxdepth 4 -name "$kind" | head -1)
+            test -n "$found" || { echo "::error title=plugin build::no $kind was produced"; exit 1; }
+            echo "built $found"
+          done
+
+      - name: Validate the AU
+        run: |
+          set -o pipefail
+          COMPONENT=$(find build/PumpBoardPlugin_artefacts -maxdepth 4 -name "pump BOARD.component" | head -1)
+          COMPONENTS="$HOME/Library/Audio/Plug-Ins/Components"
+          mkdir -p "$COMPONENTS"
+          rm -rf "$COMPONENTS/pump BOARD.component"
+          cp -R "$COMPONENT" "$COMPONENTS/"
+          # An ad-hoc signature is enough for the out-of-process AU host to load it here; distribution signing,
+          # notarisation and the VST3 validator are card 8.9.
+          codesign --force --sign - "$COMPONENTS/pump BOARD.component"
+          # aumf: AU_MAIN_TYPE is a MusicEffect. Subtype and manufacturer are the plugin codes in CMakeLists.txt.
+          auval -v aumf Pb01 Wake 2>&1 | tee auval.log || {
+            grep -E "FAILED|ERROR|Error|error" auval.log | head -15 | while IFS= read -r line; do echo "::error title=auval::${line}"; done
+            tail -40 auval.log
+            exit 1; }

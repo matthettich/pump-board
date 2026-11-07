@@ -84,6 +84,8 @@ file(GLOB_RECURSE PB_CORE_SOURCES CONFIGURE_DEPENDS
 
 # ---- Core library shared by the app and the tests ----
 add_library(PumpBoardCore STATIC ${PB_CORE_SOURCES} ${PUMP_DSP_SOURCES})
+# The plugin links this library into a bundle, so its objects must be position independent. Harmless for the app.
+set_target_properties(PumpBoardCore PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
 target_include_directories(PumpBoardCore PUBLIC Source ${PUMP_DSP_INCLUDES})
 target_link_libraries(PumpBoardCore
     PUBLIC
@@ -95,7 +97,9 @@ target_link_libraries(PumpBoardCore
 target_compile_definitions(PumpBoardCore PUBLIC
     JUCE_WEB_BROWSER=0
     JUCE_USE_CURL=0
-    JUCE_STANDALONE_APPLICATION=1
+    # JUCE_STANDALONE_APPLICATION deliberately does not live here: it is PUBLIC, so it would follow the core into
+    # the plugin and make the shared code think it is an app. juce_add_gui_app sets it for the app target itself,
+    # and juce_add_plugin sets it to JucePlugin_Build_Standalone for the plugin (card 8.1).
     $<$<CONFIG:Debug>:PB_ALLOCATION_GUARD=1>)
 
 # ---- Fonts (card 5.27) ----
@@ -125,6 +129,36 @@ set(PB_FONT_LICENCES
     ${CMAKE_SOURCE_DIR}/external/pump/common/fonts/OFL-JetBrainsMono.txt)
 set_source_files_properties(${PB_FONT_LICENCES} PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
 target_sources(PumpBoard PRIVATE ${PB_FONT_LICENCES})
+
+# ---- Plugin (card 8.1) ----
+# A second set of artefacts from the same sources: VST3 and AU beside the app, never instead of it. Its own bundle
+# id, its own codes, its own bundle. It links the core and the fonts, and nothing from Source/App — that is where
+# START_JUCE_APPLICATION and the audio device live.
+juce_add_plugin(PumpBoardPlugin
+    PRODUCT_NAME "pump BOARD"
+    PLUGIN_NAME "pump BOARD"
+    COMPANY_NAME "wake"
+    BUNDLE_ID "xyz.matthettich.pumpboard.plugin"
+    PLUGIN_MANUFACTURER_CODE Wake
+    PLUGIN_CODE Pb01
+    DESCRIPTION "pump BOARD — sixteen pump pedals in series"
+    FORMATS VST3 AU                        # JUCE only creates the formats this platform can build
+    IS_SYNTH FALSE
+    NEEDS_MIDI_INPUT TRUE                  # footswitch, CC and clock mappings arrive from the host
+    NEEDS_MIDI_OUTPUT FALSE
+    IS_MIDI_EFFECT FALSE
+    EDITOR_WANTS_KEYBOARD_FOCUS TRUE       # card 8.5: computer-key mappings only work while the editor has focus
+    VST3_CATEGORIES Fx
+    # A MIDI-input effect is what JUCE picks for NEEDS_MIDI_INPUT: an AU host files the AU under MIDI-controlled
+    # effects. kAudioUnitType_Effect would put it in the plain effects list instead, at the cost of the MIDI the
+    # board's mappings need.
+    AU_MAIN_TYPE kAudioUnitType_MusicEffect
+    COPY_PLUGIN_AFTER_BUILD FALSE)
+
+# Card 8.1 is the stub only; later cards add Source/Plugin/*.cpp and this glob picks them up.
+file(GLOB_RECURSE PB_PLUGIN_SOURCES CONFIGURE_DEPENDS Source/Plugin/*.cpp)
+target_sources(PumpBoardPlugin PRIVATE ${PB_PLUGIN_SOURCES})
+target_link_libraries(PumpBoardPlugin PRIVATE PumpBoardCore PumpBoardFonts juce::juce_gui_extra)
 
 # ---- Tests ----
 juce_add_console_app(PumpBoardTests PRODUCT_NAME "PumpBoardTests")
