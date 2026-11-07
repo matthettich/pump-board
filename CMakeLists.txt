@@ -93,11 +93,10 @@ target_compile_definitions(PumpBoardCore PUBLIC
     $<$<CONFIG:Debug>:PB_ALLOCATION_GUARD=1>)
 
 # ---- Fonts (card 5.27) ----
-# pump's two SIL OFL faces, compiled into the app so it no longer depends on the source tree at runtime and renders
+# JetBrains Mono (SIL OFL), the IDM skin's only face, compiled into the app so it no longer depends on the source tree at runtime and renders
 # identically on a machine that has neither font installed. The licence texts ride along in the bundle's Resources.
 juce_add_binary_data(PumpBoardFonts
     SOURCES
-        external/pump/common/fonts/ShareTechMono-Regular.ttf
         external/pump/common/fonts/JetBrainsMono-Regular.ttf
         external/pump/common/fonts/JetBrainsMono-Bold.ttf
     HEADER_NAME FontData.h
@@ -116,7 +115,6 @@ target_sources(PumpBoard PRIVATE ${PB_APP_SOURCES})
 target_link_libraries(PumpBoard PRIVATE PumpBoardCore PumpBoardFonts juce::juce_gui_extra)
 
 set(PB_FONT_LICENCES
-    ${CMAKE_SOURCE_DIR}/external/pump/common/fonts/OFL-ShareTechMono.txt
     ${CMAKE_SOURCE_DIR}/external/pump/common/fonts/OFL-JetBrainsMono.txt)
 set_source_files_properties(${PB_FONT_LICENCES} PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
 target_sources(PumpBoard PRIVATE ${PB_FONT_LICENCES})

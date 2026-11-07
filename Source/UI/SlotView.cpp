@@ -8,7 +8,7 @@ using namespace style::draw;
 
 SlotView::SlotView (int indexIn) : index (indexIn)
 {
-    theme.build (accents::machine(), style::isDark());
+    theme.build();
     setMouseCursor (juce::MouseCursor::PointingHandCursor);
 }
 
@@ -83,12 +83,7 @@ void SlotView::paint (juce::Graphics& g)
     const bool empty = name.isEmpty();
     const auto neon = accentForCategory (category);
 
-    // body: panel fill, ink outline, offset block behind
-    g.setColour (theme.bg);
-    g.fillRect (r.translated (4.0f, 4.0f));
-    g.setColour (theme.dim);
-    g.drawRect (r.translated (4.0f, 4.0f).reduced (0.75f), 1.5f);
-
+    // body: panel fill and ink outline, flat (the IDM skin has no offset block)
     g.setColour (empty ? theme.bg : theme.panel);
     g.fillRect (r);
 
@@ -145,7 +140,7 @@ void SlotView::paint (juce::Graphics& g)
 
         g.setColour (withAlpha (theme.ink, 0.16f));
         g.fillRect (bar);
-        g.setColour (load > 0.9f ? juce::Colour (0xffff5a5a) : withAlpha (neon, 0.85f));
+        g.setColour (load > 0.9f ? theme.red : withAlpha (neon, 0.85f));
         g.fillRect (bar.withWidth (bar.getWidth() * juce::jlimit (0.0f, 1.0f, load)));
     }
 

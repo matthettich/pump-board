@@ -99,7 +99,7 @@ juce::String formatParamValue (const ParamInfo& info, float value)
 GenericEffectEditor::GenericEffectEditor (ParameterRegistry& registryIn)
     : registry (registryIn)
 {
-    theme.build (accents::machine(), style::isDark());
+    theme.build();
     dialLookAndFeel = std::make_unique<PumpDialLookAndFeel> (theme);
 }
 
@@ -383,18 +383,21 @@ void GenericEffectEditor::showParamMenu (int registryIndex, const ParamInfo& inf
         }
 
         auto* window = new juce::AlertWindow ("Value", info.name + ":", juce::MessageBoxIconType::NoIcon);
-        window->addTextEditor ("value", formatParamValue (info, safe->registry.get (registryIndex)));
+        // The raw number, not the display text: a choice label ("Short tank") or a unit string ("1/8") parsed back
+        // with getFloatValue() became 0 or 1, so pressing Return on an untouched field changed the parameter.
+        const auto initialText = juce::String (safe->registry.get (registryIndex), 3);
+        window->addTextEditor ("value", initialText);
         window->addButton ("Set", 1, juce::KeyPress (juce::KeyPress::returnKey));
         window->addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));
 
-        window->enterModalState (true, juce::ModalCallbackFunction::create ([safe, window, registryIndex] (int answer)
+        window->enterModalState (true, juce::ModalCallbackFunction::create ([safe, window, registryIndex, initialText] (int answer)
         {
             if (answer != 1 || safe == nullptr)
                 return;
 
             const auto typed = window->getTextEditorContents ("value").trim();
 
-            if (typed.isEmpty())
+            if (typed.isEmpty() || typed == initialText || ! typed.containsAnyOf ("0123456789"))
                 return;
 
             safe->registry.set (registryIndex, typed.getFloatValue());

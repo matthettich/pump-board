@@ -18,7 +18,7 @@ juce::String formatDb (float db)
 MeterBar::MeterBar (BoardProcessor& processorIn, ParameterRegistry& registryIn)
     : processor (processorIn), registry (registryIn)
 {
-    theme.build (accents::machine(), style::isDark());
+    theme.build();
     dialLookAndFeel = std::make_unique<style::PumpDialLookAndFeel> (theme);
 
     inTrimIndex = registry.find ("board/inputTrim");
@@ -148,7 +148,7 @@ void MeterBar::paintMeter (juce::Graphics& g, juce::Rectangle<float> area, float
 
     if (norm > 0.0f)
     {
-        g.setColour (db >= -3.0f ? theme.red : theme.neon);
+        g.setColour (db >= -3.0f ? theme.red : theme.second);   // green while safe, pink when hot
         g.fillRect (inner.withTrimmedTop (inner.getHeight() * (1.0f - norm)));
     }
 

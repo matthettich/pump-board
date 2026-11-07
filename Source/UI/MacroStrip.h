@@ -22,6 +22,7 @@ public:
 
     // The pedal editor reports the control the user clicked while a macro was waiting for one.
     void addPickedTarget (int paramIndex);
+    void cancelPick() { pendingMacro = -1; repaint(); }      // Esc, or the pick abandoned another way
 
     std::function<void (int macro)> onPickRequested;          // the window arms the editor
     std::function<void (const juce::String&)> onMessage;     // the status line

@@ -1,8 +1,8 @@
 #pragma once
-// pump BOARD — the pump visual language, ported to JUCE.
-// From pump's common/ui/Theme.hpp and PumpUI.hpp: flat and square, 1.5 px ink
-// outlines with an offset block behind keys and screens, Share Tech Mono labels,
-// one light-neon accent per thing, light or dark.
+// pump BOARD — the visual language, matched to Thunder Plus's IDM PINK & GREEN skin.
+// Flat and square, 1.5 px ink outlines on warm paper, JetBrains Mono throughout, hot pink
+// for the accent and green for the second colour. pump's accent table is kept for reference
+// (pedal ids) but no longer tints surfaces.
 //
 // pump is read-only (external/pump). Nothing here edits it; this is a port of the
 // palette maths and the drawing idioms so the app matches the plugins.
@@ -85,71 +85,57 @@ namespace accents
     inline Accent machine() { return { "machine", hex (0xB8C4DD), hex (0x354163), hex (0xFF7A45) }; }
 }
 
-// ---- the skin the whole app draws in ----------------------------------------------------------------
-// One flag, read wherever a panel builds its theme. Panels build their palette in their constructor, so
-// flipping it is not enough on its own: the window rebuilds its content (see MainWindow) and every panel
-// then reads the new value. Default dark, which is what the board has always been.
-inline bool& darkMode() { static bool dark = true; return dark; }
-inline bool isDark() { return darkMode(); }
-inline void setDark (bool dark) { darkMode() = dark; }
-
-// The neon a pedal wears on the board, by category. Shared by the painted prototype and the real slot views.
-inline juce::Colour accentForCategory (const juce::String& category)
+// ---- the skin the whole app draws in: Thunder Plus's IDM PINK & GREEN ---------------------------------------
+// One skin, copied from thunder-plus beta/index.html (`data-skin="idmpg"`): IDM's paper and ink, its orange
+// turned hot pink, its blue turned green. Flat and square, 1.5 px ink lines, JetBrains Mono everywhere.
+// The old dark/light pump palettes and the Settings SKIN switch are gone (owner, 6 Nov 2026).
+namespace idm
 {
-    if (category == "DRIVE")    return accents::tube().neon;
-    if (category == "TIME")     return accents::echo().neon;
-    if (category == "SPACE")    return accents::spring().neon;
-    if (category == "FILTER")   return accents::eq().neon;
-    if (category == "DYNAMICS") return accents::comp().neon;
-    if (category == "MOD")      return accents::swirl().neon;
-    return accents::machine().neon;
+    inline juce::Colour paper()  { return hex (0xE9E8E3); }   // --mxbg
+    inline juce::Colour panel()  { return hex (0xF2F1EC); }   // --mxpanel
+    inline juce::Colour panel2() { return hex (0xDDDCD5); }   // --mxpanel2
+    inline juce::Colour ink()    { return hex (0x141414); }   // --mx
+    inline juce::Colour ink2()   { return hex (0x505050); }   // --mx2
+    inline juce::Colour dim()    { return hex (0xBDBCB6); }   // --mxdim
+    inline juce::Colour on()     { return hex (0xFFFFFF); }   // --mxon: text on an ink fill
+    inline juce::Colour pink()   { return hex (0xFF2D8A); }   // --mxsoft / --mxcur / play
+    inline juce::Colour green()  { return hex (0x1F9E5A); }   // --mxbus / edit
 }
 
-// pump's Theme: every surface derived from one accent (pump's own maths, both variants).
+// The colour a pedal wears on the board, by category: pink for the tone-shaping half of the board, green for the
+// time-and-space half, so a board still reads at a glance with only the skin's two accents.
+inline juce::Colour accentForCategory (const juce::String& category)
+{
+    if (category == "TIME" || category == "SPACE" || category == "MOD")
+        return idm::green();
+
+    return idm::pink();
+}
+
+// The palette every panel draws with. `build` keeps its old signature so panels need not care; the accent is
+// ignored because the IDM skin is the same paper and ink for every pedal.
 struct Theme
 {
-    bool dark = true;
     juce::Colour bg, panel, panel2, ink, ink2, dim, neon, neonInk, on, second, red, grid, screen, glow;
 
-    void build (const Accent& a, bool darkMode)
-    {
-        dark = darkMode;
-        const juce::Colour white = hex (0xFFFFFF), black = hex (0x07070B);
+    Theme() { build(); }
 
-        if (! dark)
-        {
-            bg      = mix (white, a.neon, 0.16f);
-            panel   = mix (white, a.neon, 0.08f);
-            panel2  = mix (white, a.neon, 0.30f);
-            ink     = a.deep;
-            ink2    = mix (a.deep, bg, 0.38f);
-            dim     = mix (mix (a.neon, a.deep, 0.30f), white, 0.42f);
-            neon    = a.neon;
-            neonInk = a.deep;
-            on      = mix (white, a.neon, 0.06f);
-            second  = mix (a.second, black, 0.08f);
-            red     = hex (0xD0302A);
-            grid    = withAlpha (a.deep, 0.11f);
-            screen  = mix (white, a.neon, 0.05f);
-            glow    = withAlpha (a.neon, 0.0f);
-        }
-        else
-        {
-            bg      = mix (black, a.neon, 0.07f);
-            panel   = mix (black, a.neon, 0.10f);
-            panel2  = mix (black, a.neon, 0.19f);
-            ink     = mix (a.neon, white, 0.18f);
-            ink2    = mix (a.neon, bg, 0.38f);
-            dim     = mix (a.neon, bg, 0.70f);
-            neon    = a.neon;
-            neonInk = mix (black, a.neon, 0.05f);
-            on      = mix (black, a.neon, 0.05f);
-            second  = mix (a.second, white, 0.15f);
-            red     = hex (0xFF5A4E);
-            grid    = withAlpha (a.neon, 0.10f);
-            screen  = mix (black, a.neon, 0.04f);
-            glow    = withAlpha (a.neon, 0.22f);
-        }
+    void build (const Accent& = accents::machine())
+    {
+        bg      = idm::paper();
+        panel   = idm::panel();
+        panel2  = idm::panel2();
+        ink     = idm::ink();
+        ink2    = idm::ink2();
+        dim     = idm::dim();
+        neon    = idm::pink();
+        neonInk = idm::ink();
+        on      = idm::on();
+        second  = idm::green();
+        red     = idm::pink();            // Thunder's IDM skins use the accent as their red
+        grid    = withAlpha (idm::ink(), 0.10f);
+        screen  = idm::panel();
+        glow    = juce::Colours::transparentBlack;
     }
 };
 
@@ -165,9 +151,6 @@ namespace fonts
 
     inline Embedded embeddedFont (const juce::String& fileName)
     {
-        if (fileName.startsWith ("ShareTechMono"))
-            return { pumpfonts::ShareTechMonoRegular_ttf, pumpfonts::ShareTechMonoRegular_ttfSize };
-
         if (fileName.startsWith ("JetBrainsMono-Regular"))
             return { pumpfonts::JetBrainsMonoRegular_ttf, pumpfonts::JetBrainsMonoRegular_ttfSize };
 
@@ -208,10 +191,13 @@ namespace fonts
         return {};
     }
 
-    inline juce::Typeface::Ptr& labelTypeface() { static juce::Typeface::Ptr p = load ("ShareTechMono-Regular.ttf"); return p; }
+    // The IDM skin sets everything in JetBrains Mono (Thunder Plus: --font and --mono are both JetBrains Mono).
+    // Labels use the regular cut (as Thunder's buttons do); the bold cut is for the brand and emphasis.
+    inline juce::Typeface::Ptr& labelTypeface() { static juce::Typeface::Ptr p = load ("JetBrainsMono-Regular.ttf"); return p; }
+    inline juce::Typeface::Ptr& boldTypeface()  { static juce::Typeface::Ptr p = load ("JetBrainsMono-Bold.ttf"); return p; }
     inline juce::Typeface::Ptr& monoTypeface()  { static juce::Typeface::Ptr p = load ("JetBrainsMono-Regular.ttf"); return p; }
 
-    // Label (Share Tech Mono) or mono (JetBrains Mono). `tracking` is in pixels, as pump's
+    // Label or mono: both JetBrains Mono Regular now, kept as two calls so the call sites stay readable. `tracking` is in pixels, as pump's
     // textLetterSpacing is; JUCE's extra kerning is a proportion of the font height, so divide.
     inline juce::Font get (bool label, float height, float tracking = 0.0f)
     {
@@ -221,40 +207,42 @@ namespace fonts
                                      : juce::Font (juce::FontOptions (juce::Font::getDefaultMonospacedFontName(),
                                                                       height, juce::Font::plain));
 
-        return tracking != 0.0f ? f.withExtraKerningFactor (tracking / juce::jmax (1.0f, height)) : f;
+        return std::abs (tracking) > 1.0e-6f ? f.withExtraKerningFactor (tracking / juce::jmax (1.0f, height)) : f;
+    }
+
+    // JetBrains Mono Bold: the brand and anything that must shout.
+    inline juce::Font bold (float height, float tracking = 0.0f)
+    {
+        auto& tf = boldTypeface();
+        juce::Font f = tf != nullptr ? juce::Font (juce::FontOptions (tf).withHeight (height))
+                                     : get (true, height).boldened();
+        return std::abs (tracking) > 1.0e-6f ? f.withExtraKerningFactor (tracking / juce::jmax (1.0f, height)) : f;
     }
 }
 
 // ---- drawing primitives (the Simple skin) ---------------------------------------------------------------------
 namespace draw
 {
-    // A Simple-skin key/screen: fill, 1.5 px ink outline, and an offset outlined block behind it.
+    // A key: flat fill and a 1.5 px ink outline, the IDM skin's button (Thunder: page-colour button, ink border; an
+    // "on" button is filled with ink). No offset block: the IDM skin is flat. `pressed` and `offset` are kept so
+    // the call sites did not have to change; a pressed key darkens to panel2.
     inline void keyBox (juce::Graphics& g, const Theme& t, juce::Rectangle<float> r,
-                        bool filled, bool pressed = false, juce::Colour fillOverride = juce::Colour(), float offset = 4.0f)
+                        bool filled, bool pressed = false, juce::Colour fillOverride = juce::Colour(),
+                        [[maybe_unused]] float offset = 4.0f)
     {
-        const float o = pressed ? 1.0f : offset;
-
-        if (o > 0.0f)
-        {
-            g.setColour (t.bg);
-            g.fillRect (r.translated (o, o));
-            g.setColour (t.dim);
-            g.drawRect (r.translated (o, o).reduced (0.75f), 1.5f);
-        }
-
-        g.setColour (fillOverride.isTransparent() ? (filled ? t.ink : t.bg) : fillOverride);
+        const auto fill = ! fillOverride.isTransparent() ? fillOverride
+                        : filled                         ? t.ink
+                        : pressed                        ? t.panel2
+                                                         : t.bg;
+        g.setColour (fill);
         g.fillRect (r);
         g.setColour (t.ink);
         g.drawRect (r.reduced (0.75f), 1.5f);
     }
 
-    // A screen area (graphs, readouts): panel fill, ink outline, offset block.
+    // A screen area (graphs, readouts): panel fill, ink outline, flat.
     inline void screenBox (juce::Graphics& g, const Theme& t, juce::Rectangle<float> r)
     {
-        g.setColour (t.bg);
-        g.fillRect (r.translated (5.0f, 5.0f));
-        g.setColour (t.dim);
-        g.drawRect (r.translated (5.0f, 5.0f).reduced (0.75f), 1.5f);
         g.setColour (t.screen);
         g.fillRect (r);
         g.setColour (t.ink);

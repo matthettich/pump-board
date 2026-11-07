@@ -36,7 +36,7 @@ MacroStrip::MacroStrip (MacroBank& bankIn, ParameterRegistry& registryIn,
                         std::function<juce::String (int paramIndex)> labelIn)
     : bank (bankIn), registry (registryIn), labelForParam (std::move (labelIn))
 {
-    theme.build (accents::machine(), style::isDark());
+    theme.build();
     dialLookAndFeel = std::make_unique<PumpDialLookAndFeel> (theme);
 
     for (int i = 0; i < MacroBank::kNumMacros; ++i)

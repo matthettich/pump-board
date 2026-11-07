@@ -70,7 +70,7 @@ private:
 MappingsView::MappingsView (LearnController& controllerIn)
     : controller (controllerIn)
 {
-    theme.build (accents::machine(), style::isDark());
+    theme.build();
 
     model = std::make_unique<Model> (*this, controller);
     list.setModel (model.get());
@@ -79,8 +79,8 @@ MappingsView::MappingsView (LearnController& controllerIn)
     list.setColour (juce::ListBox::outlineColourId, juce::Colours::transparentBlack);
     addAndMakeVisible (list);
 
-    closeButton.setColour (juce::TextButton::buttonColourId, juce::Colour (0xff20202a));
-    closeButton.setColour (juce::TextButton::textColourOffId, juce::Colour (0xffb8c4dd));
+    closeButton.setColour (juce::TextButton::buttonColourId, pb::style::idm::paper());
+    closeButton.setColour (juce::TextButton::textColourOffId, pb::style::idm::ink());
     closeButton.onClick = [this] { if (onClose != nullptr) onClose(); };
     addAndMakeVisible (closeButton);
 

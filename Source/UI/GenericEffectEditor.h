@@ -33,6 +33,7 @@ public:
 
     // Card 3.4: while a macro waits for a target, the next control click is reported instead of acting.
     void setPickTargetMode (bool shouldPick);
+    bool isPickingTarget() const noexcept { return picking; }
     std::function<void (int paramIndex)> onControlPicked;
 
     void paint (juce::Graphics&) override;

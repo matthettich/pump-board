@@ -19,7 +19,6 @@ public:
     void resized() override;
 
     std::function<void()> onClose;
-    std::function<void()> onSkinChanged;      // card 5.5: the window rebuilds when the skin flips
 
 private:
     void timerCallback() override;
@@ -34,7 +33,6 @@ private:
     juce::AudioDeviceSelectorComponent selector;
     juce::TextButton done { "DONE" };
     juce::TextButton measure { "MEASURE ROUND TRIP" };
-    juce::TextButton skin { "SKIN" };
     LatencyProbe probe;
     std::unique_ptr<juce::AudioIODeviceCallback> probeCallback;
     juce::String measureStatus;

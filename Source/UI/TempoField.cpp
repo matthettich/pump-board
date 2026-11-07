@@ -8,7 +8,7 @@ using namespace style;
 TempoField::TempoField (ParameterRegistry& registryIn)
     : registry (registryIn)
 {
-    theme.build (accents::machine(), style::isDark());
+    theme.build();
     tempoIndex = registry.find ("board/tempo");
     setMouseCursor (juce::MouseCursor::UpDownResizeCursor);
     startTimerHz (12);
@@ -74,8 +74,12 @@ void TempoField::mouseDoubleClick (const juce::MouseEvent&)
     window->addButton ("Set", 1, juce::KeyPress (juce::KeyPress::returnKey));
     window->addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));
 
-    window->enterModalState (true, juce::ModalCallbackFunction::create ([this, window] (int result)
+    window->enterModalState (true, juce::ModalCallbackFunction::create (
+        [this, safe = juce::Component::SafePointer<TempoField> (this), window] (int result)
     {
+        if (safe == nullptr)
+            return;
+
         if (result != 1)
             return;
 

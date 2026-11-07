@@ -22,7 +22,6 @@ public:
     // 1100 x 700 at 1x. `scale` renders the whole board into a larger image for inspection.
     void renderToPng (const juce::File& out, float scale);
 
-    void setDark (bool shouldBeDark);
     void setSelectedSlot (int index);
 
     // The status line's text comes from the live engine once one exists (card 0.2).
@@ -96,7 +95,6 @@ private:
 
     std::array<SlotInfo, 16> slots;
     int selected = 2;
-    bool dark = true;
     juce::String statusText;
     bool paintedEditor = true;
     bool paintedSlots = true;
