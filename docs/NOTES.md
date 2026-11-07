@@ -758,3 +758,31 @@ not for merging. Every finding was checked against the code before changing anyt
 - GRUMBLE's mono dry path fixed **in pump** (matthettich/pump 419fbcf: a latency-aligned dry line per channel; the
   mono sum still drives the creature) and the submodule bumped to it. pump's own mix-0 test now uses a different,
   opposite-phase right channel and fails on the old engine. pump BOARD: 3216 expectations pass.
+
+## 2026-11-07 — Card 8.2: the board runs inside the plugin
+The plugin target from card 8.1 now has something to hand a host. `PluginSession` owns its own
+`ParameterRegistry`, `MidiRouter`, `KeyRouter`, `LearnController`, `MacroBank`, `BoardProcessor` and `BoardModel`;
+`PluginProcessor` is a thin `AudioProcessor` around it: stereo in and out (mono in is accepted and folded up by the
+board, as in the app), `processBlock` straight into `BoardProcessor`, no editor yet.
+- The app is untouched: `MainContent` still constructs its own routers and macros, and no `Source/App` or `Source/UI`
+  file changed. The ownership move the plan had in 8.2 moved to 8.5, where the extracted `BoardContent` needs one set
+  of objects shared between two hosts; `docs/tasks/phase-8.md` says so now.
+- `BoardModel::prepareAllForHost()` is new. `prepareAll()` waits for two blocks after detaching the chain, which is
+  right for a device change mid-play and wrong for `prepareToPlay`, where the host has already guaranteed the audio
+  thread is idle: it would only stall the host for the 500 ms timeout.
+- `BoardProcessor` reads `AudioProcessor::getSampleRate()` for the MIDI clock, and only the app's
+  `AudioProcessorPlayer` used to set it. `PluginSession::prepare` calls `setRateAndBufferSizeDetails` first; without
+  it a plugin's clock would run on a zero rate.
+- Pedal registration is once per process, guarded by `EffectRegistry::contains`: two plugin instances share one
+  registry, and a second `registerBuiltInEffects` would assert on instance two's load.
+- Garbage collection is a 30 Hz timer on the processor, not on the editor: a host prepares and runs a plugin whose
+  editor has never been opened, and only the editor used to run that timer.
+- The processor and session live in a `PumpBoardPluginSupport` static library so `PumpBoardTests` can drive them;
+  only `createPluginFilter` stays in the bundle. `CMakeLists.txt` no longer globs `Source/Plugin/*.cpp`, so the entry
+  point cannot end up in the test binary.
+- CodeRabbit (PR #2) asked whether automation follows the slot or the pedal after an insertion. Settled in the plan:
+  automation follows the slot, because a fixed parameter list is what hosts accept and a lane must keep naming the
+  same position; the pedal keeps its own settings and its lane moves with it.
+- Verified: all five new or changed sources pass `g++ -std=c++20 -fsyntax-only -Wall -Wextra -Werror` against the
+  pinned JUCE headers. Not verified: the build itself, the unit tests and a host load — this machine has no cmake,
+  no freetype/X11 headers and is Linux, so the `plugin` CI job is the first real check.

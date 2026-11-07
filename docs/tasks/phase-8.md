@@ -70,22 +70,23 @@ passes on the stub; the app's zip contents are byte-for-byte the same shape as b
 ## Card 8.2 — Session and processor: the board plays in a host
 
 **Files:** `Source/Plugin/PluginSession.{h,cpp}` (new), `Source/Plugin/PluginProcessor.{h,cpp}` (new),
-`Source/App/MainWindow.{h,cpp}`.
+`Source/Engine/BoardModel.{h,cpp}`, `CMakeLists.txt`.
 
 `PluginSession` owns what must outlive the editor: `ParameterRegistry`, `MidiRouter`, `KeyRouter`,
 `LearnController`, `MacroBank`, `BoardProcessor`, `BoardModel`, and a message-thread `Timer` that calls
 `collectGarbage()` on the board and the router. Construction order mirrors `Main.cpp`:
 registry → router → processor → model → keys/learn/macros.
 
-To make that possible, move ownership of `KeyRouter`, `LearnController` and `MacroBank` out of `MainContent` and
-into the object that owns the engine. `MainContent` then takes references instead of constructing them. In the
-app they live in `MainWindow`; in the plugin they live in the session. Two consequences to handle in the same
-card:
+The plugin gets its own `KeyRouter`, `LearnController` and `MacroBank` inside the session. The app is not touched:
+`MainContent` keeps constructing its three as it does today. That split is deliberate, not an oversight — the
+app's editor always exists, the plugin's may never, and the plugin's state (card 8.3) needs the session's copies
+whether or not a window is open. Card 8.5 does the ownership move, when the extracted `BoardContent` has to take
+these as references so one set of objects can serve both hosts. Two consequences land there with it:
 
-- `MainContent` sets callbacks on `LearnController` and `KeyRouter` that capture `this`. Its destructor must
+- `BoardContent` sets callbacks on `LearnController` and `KeyRouter` that capture `this`. Its destructor must
   clear them, or an editor that closes while a learn is armed leaves a dangling callback.
 - The skin rebuild (`buildContent`) must keep the same instances, so macros no longer reset when the skin
-  changes — a small behaviour improvement that falls out of the move.
+  changes.
 
 `PluginProcessor` is the `AudioProcessor` the host sees: it holds the session, delegates `processBlock` to
 `BoardProcessor`, accepts stereo-in/stereo-out and mono-in/stereo-out in `isBusesLayoutSupported` (a guitar on a
@@ -93,9 +94,10 @@ mono track must not be forced to stereo), returns `"pump BOARD"` from `getName`,
 now. Tempo comes from `board/tempo` as it does today.
 
 **Check:** a board of three pedals loads in a VST3 host and in an AU host and processes audio; the app still
-builds and runs; a new `Tests/PluginSessionTests.cpp` proves construct → insert three pedals → capture → apply →
-destruct with the allocation guard at zero during `processBlock`; closing a session while a mapping is learning
-does not call into freed memory.
+builds, runs and passes its suite; a new `Tests/PluginSessionTests.cpp` proves the default chain, a processed
+block with the allocation guard at zero, the mono fold-up, a re-prepare at a new rate and block, and destruction
+with an insert still pending. The board's processor must also be told the rate and block itself: only the app's
+`AudioProcessorPlayer` would normally do that.
 
 ---
 
@@ -110,7 +112,8 @@ load uses, on the message thread, with the board bypass fade so a restore during
 must tolerate empty, truncated, foreign and future-versioned data by leaving the current board alone and
 publishing nothing.
 
-`BoardState::capture` needs the macro bank and mapping list, which is exactly why card 8.2 moved them.
+`BoardState::capture` needs the macro bank and mapping list, which is why the session owns them (card 8.2) rather
+than the editor: state is saved and restored whether or not a window was ever opened.
 
 The plugin does not read or write `workingBoardFile()` and does not read `settings`. Tempo in the document comes
 from the state; tempo from the host is card 8.6.
@@ -142,9 +145,16 @@ Three directions to get right, each with a test:
 
 Macro renames and the slot list changing must call `updateHostDisplay` so a host redraws its generic editor.
 
+**Decision (and it is a real one): automation follows the slot, not the pedal.** `slot/3/on` is a position in the
+chain, and it keeps naming position 3 after a pedal is inserted before it, exactly as a fixed-lane mixer's channel
+3 does. The alternative — an ID that travels with the pedal — would change the parameter list at runtime, which
+hosts do not accept, and would make a saved automation lane point at a pedal that may no longer exist. The
+consequence to state in the docs: inserting a pedal shifts which pedal an existing lane drives; the pedal's own
+settings move with the pedal, its automation lane does not.
+
 **Check:** automation written by the host reaches the registry; a registry write from the UI is seen by the host
-once; a full automation pass allocates zero times; a slot inserted at position 3 after a load does not steal the
-`slot/3/on` parameter from the pedal that was already there.
+once; a full automation pass allocates zero times; inserting at position 3 keeps `slot/3/on` naming position 3 (the
+new pedal), while the pedal that moved keeps its settings and its own lane moves with its position.
 
 ---
 

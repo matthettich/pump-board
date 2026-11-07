@@ -155,13 +155,19 @@ juce_add_plugin(PumpBoardPlugin
     AU_MAIN_TYPE kAudioUnitType_MusicEffect
     COPY_PLUGIN_AFTER_BUILD FALSE)
 
-# Card 8.1 is the stub only; later cards add Source/Plugin/*.cpp and this glob picks them up.
-file(GLOB_RECURSE PB_PLUGIN_SOURCES CONFIGURE_DEPENDS Source/Plugin/*.cpp)
-target_sources(PumpBoardPlugin PRIVATE ${PB_PLUGIN_SOURCES})
-target_link_libraries(PumpBoardPlugin PRIVATE PumpBoardCore PumpBoardFonts juce::juce_gui_extra)
+# Card 8.2: the processor and its session live in a library the plugin and the tests both link. The entry point
+# does not: createPluginFilter belongs to the bundle, and a test binary has no host to hand it to.
+add_library(PumpBoardPluginSupport STATIC
+    Source/Plugin/PluginSession.cpp
+    Source/Plugin/PluginProcessor.cpp)
+set_target_properties(PumpBoardPluginSupport PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
+target_link_libraries(PumpBoardPluginSupport PUBLIC PumpBoardCore)
+
+target_sources(PumpBoardPlugin PRIVATE Source/Plugin/PluginEntry.cpp)
+target_link_libraries(PumpBoardPlugin PRIVATE PumpBoardPluginSupport PumpBoardFonts juce::juce_gui_extra)
 
 # ---- Tests ----
 juce_add_console_app(PumpBoardTests PRODUCT_NAME "PumpBoardTests")
 file(GLOB_RECURSE PB_TEST_SOURCES CONFIGURE_DEPENDS Tests/*.cpp)
 target_sources(PumpBoardTests PRIVATE ${PB_TEST_SOURCES})
-target_link_libraries(PumpBoardTests PRIVATE PumpBoardCore)
+target_link_libraries(PumpBoardTests PRIVATE PumpBoardCore PumpBoardPluginSupport)
