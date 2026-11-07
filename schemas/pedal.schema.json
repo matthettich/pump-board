@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "pump BOARD custom pedal file (.pedal)",
+  "type": "object",
+  "required": ["schemaVersion", "name", "nodes", "wires"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "name": { "type": "string" },
+    "nodes": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+        "type": "object",
+        "required": ["id", "typeId"],
+        "properties": {
+          "id": { "type": "integer" },
+          "typeId": { "type": "string" },
+          "params": { "type": "object", "additionalProperties": { "type": "number" } },
+          "x": { "type": "number" },
+          "y": { "type": "number" },
+          "feedbackPairId": { "type": "integer" }
+        }
+      }
+    },
+    "wires": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["from", "fromPort", "to", "toPort"],
+        "properties": {
+          "from": { "type": "integer" },
+          "fromPort": { "type": "integer" },
+          "to": { "type": "integer" },
+          "toPort": { "type": "integer" },
+          "modulation": { "type": "boolean", "default": false }
+        }
+      }
+    },
+    "knobs": {
+      "type": "array",
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "required": ["name", "node", "paramId"],
+        "properties": {
+          "name": { "type": "string" },
+          "node": { "type": "integer" },
+          "paramId": { "type": "string" },
+          "min": { "type": "number" },
+          "max": { "type": "number" }
+        }
+      }
+    }
+  }
+}

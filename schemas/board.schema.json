@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "pump BOARD board file (.board)",
+  "type": "object",
+  "required": ["schemaVersion", "name", "slots"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "name": { "type": "string" },
+    "inputTrimDb": { "type": "number", "default": 0 },
+    "outputTrimDb": { "type": "number", "default": 0 },
+    "slots": {
+      "type": "array",
+      "maxItems": 16,
+      "items": {
+        "type": "object",
+        "required": ["typeId"],
+        "properties": {
+          "typeId": { "type": "string", "description": "EffectRegistry id, \"pedal.custom\", or \"\" for empty" },
+          "on": { "type": "boolean", "default": true },
+          "params": { "type": "object", "additionalProperties": { "type": "number" } },
+          "pedalFile": { "type": "string", "description": "Relative path to a .pedal file when typeId is pedal.custom" }
+        }
+      }
+    },
+    "macros": {
+      "type": "array",
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "value": { "type": "number", "minimum": 0, "maximum": 1 },
+          "targets": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["slot", "paramId"],
+              "properties": {
+                "slot": { "type": "integer", "minimum": 0, "maximum": 15 },
+                "paramId": { "type": "string" },
+                "min": { "type": "number" },
+                "max": { "type": "number" },
+                "curve": { "enum": ["linear", "exponential", "logarithmic", "inverted"] }
+              }
+            }
+          }
+        }
+      }
+    },
+    "mappings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["source", "number", "action"],
+        "properties": {
+          "source": { "enum": ["note", "cc", "programChange", "key"] },
+          "channel": { "type": "integer", "minimum": 0, "maximum": 16 },
+          "number": { "type": "integer" },
+          "action": { "enum": ["toggle", "momentary", "ccThreshold", "setValue", "presetSelect", "presetNext", "presetPrev"] },
+          "target": { "type": "string", "description": "\"slot/<index>/<paramId>\", \"board/bypass\" or \"macro/<n>\"; slot by position, not uid" },
+          "min": { "type": "number" },
+          "max": { "type": "number" }
+        }
+      }
+    }
+  },
+  "example": {
+    "schemaVersion": 1,
+    "name": "Clean to chaos",
+    "slots": [
+      { "typeId": "pump.tube", "on": true, "params": { "drive": 0.4, "mix": 1.0 } },
+      { "typeId": "pump.spring", "on": false, "params": { "mix": 0.3 } }
+    ],
+    "macros": [ { "name": "Wreck", "value": 0, "targets": [ { "slot": 0, "paramId": "drive", "min": 0.2, "max": 1, "curve": "linear" } ] } ],
+    "mappings": [ { "source": "note", "channel": 0, "number": 36, "action": "toggle", "target": "slot/1/on" } ]
+  }
+}
