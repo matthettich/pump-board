@@ -1,5 +1,6 @@
 #include "Control/MidiClock.h"
 #include "Engine/BoardProcessor.h"
+#include "Common/Sanitize.h"
 #include "Effects/TempoAware.h"
 #include "Engine/SafetyLimiter.h"
 #include "Common/AllocationGuard.h"
@@ -220,6 +221,10 @@ void BoardProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiB
         buffer.clear (ch, 0, numSamples);
 
     const int channels = juce::jmin (2, numChannels);
+
+    // A non-finite sample from the device (a Mac interface's first buffer can be garbage) would poison every pedal
+    // with feedback until it was rebuilt; it is zeroed before anything reads it (see Common/Sanitize.h).
+    scrubNonFinite (buffer, channels, numSamples);
 
     // Mono input: a guitar wired to input 1 leaves channel 2 silent, so fold it up.
     // The card asks for a 1 s test; the fixed header has no counter member for that, so this is per block.

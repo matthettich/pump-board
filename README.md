@@ -58,7 +58,7 @@ open "build/PumpBoard_artefacts/Debug/pump BOARD.app"
 ## Tests
 
 ```bash
-./build/PumpBoardTests_artefacts/Debug/PumpBoardTests     # 3204 expectations, 0 failing
+./build/PumpBoardTests_artefacts/Debug/PumpBoardTests     # 3212 expectations, 0 failing
 ```
 
 The suite covers the engine, the router, macros, presets, every adapter's null test against pump's engine, and

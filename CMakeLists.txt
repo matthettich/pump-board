@@ -113,6 +113,7 @@ juce_add_gui_app(PumpBoard
     PRODUCT_NAME "pump BOARD"
     COMPANY_NAME "wake"
     BUNDLE_ID "xyz.matthettich.pumpboard"
+    ICON_BIG "${CMAKE_SOURCE_DIR}/Resources/icon-1024.png"   # one compact pedal in the IDM pink & green skin; source Resources/icon.svg
     MICROPHONE_PERMISSION_ENABLED TRUE
     MICROPHONE_PERMISSION_TEXT "pump BOARD needs audio input to process your instrument.")
 

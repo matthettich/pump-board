@@ -712,3 +712,18 @@ Scaffold headers touched: `Slot.h` (makeSuccessor, ownsRegistrations, preparedBl
 - Category colours compare case-insensitively: SWIRL's "modulation" was falling through to pink.
 - Verified: 3204 expectations pass on Linux; renders of VOX (3 pages), GRUMBLE, TUNE, ECHO, TUBE looked at.
 - Not verified: anything on the Mac, page keys clicked live, how the three voice pedals sound on a guitar.
+
+## 2026-11-07 — TWANG went silent at startup (one NaN poisons a pedal), and an app icon
+- Owner: TWANG wasn't passing audio correctly after launching the app; rebuilding the pedal fixed it. Probing the
+  real TWANG through startup, device re-prepare, model/tuning changes and off/on found nothing — but **one NaN
+  sample at the input left it silent for good**: its springs' feedback state goes NaN, the safety limiter turns the
+  output to zero, and only a fresh pedal recovers. A Mac interface can deliver a garbage first buffer when it
+  starts, which fits "at startup". The same applies to any pedal with feedback (reverbs, delays, filters).
+- Fix: `Common/Sanitize.h` `scrubNonFinite`, run on the board's input (before the meter and mono fold) and on every
+  slot's output right after its pedal, so no pedal ever sees a non-finite sample and one that blows up internally
+  cannot take the pedals after it down. A pedal that blows up *internally* still stays silent until it is
+  rebuilt (see HANDOVER, Still open). `Tests/NonFiniteTests.cpp`; both tests fail with the scrub removed.
+- App icon: one compact pedal (pink body, paper knobs and label, green check LED, ink pad) on a paper tile,
+  `Resources/icon.svg` → `Resources/icon-1024.png` (rendered with Chromium so the label uses JetBrains Mono Bold),
+  set as `ICON_BIG` in `CMakeLists.txt`; JUCE builds the .icns from it.
+- Verified: 3212 expectations pass on Linux. The icon's look in the Dock and the startup fix on the Neo are not.

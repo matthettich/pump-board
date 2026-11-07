@@ -1,4 +1,5 @@
 #include "Engine/Slot.h"
+#include "Common/Sanitize.h"
 #include "Engine/LoadMeter.h"
 #include <cmath>
 
@@ -190,6 +191,9 @@ void Slot::process (juce::AudioBuffer<float>& buffer) noexcept
     effect->process (buffer);
     load::publish (this, juce::Time::highResolutionTicksToSeconds (juce::Time::getHighResolutionTicks() - startedTicks),
                    numSamples);
+
+    // A pedal that blew up must not take the pedals after it down too: its NaNs stop here (Common/Sanitize.h).
+    scrubNonFinite (buffer, numChannels, numSamples);
 
     // 5. equal-power crossfade, 10 ms, against the delayed dry
     // (dryWritePos has already advanced past this block, so the block's own first sample sits at -numSamples)
