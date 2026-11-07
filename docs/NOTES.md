@@ -818,3 +818,19 @@ then writes the tempo.
 - Not covered by a test: the held-until-silence deferral, because the tests cannot rely on a built-in pedal reporting
   a non-zero latency at its default settings. The host-tempo path, the clock precedence and the latency sum are.
 - Verified: typecheck only; nothing was built or run on this machine.
+
+## 2026-11-07 — Card 8.8: host-shaped blocks, rates and input
+`Tests/PluginRobustnessTests.cpp` drives the plugin the way a DAW does rather than the way one device does: 44.1,
+48, 88.2 and 96 kHz against blocks of 0, 1, 7, 64, 128, 511 and 1024 in every combination, each pair re-preparing a
+board that was prepared for the one before it; a 4096-sample block on a board prepared for 64, which is the case
+`Slot` passes dry for; mono in with stereo out accepted and the reverse refused; and full-scale plus NaN and infinite
+input.
+- Everything goes through `PluginProcessor::processBlock`, so the wrapper, the session and the board are exercised
+  together rather than one at a time.
+- No production change was needed: `PluginSession::prepare` already re-prepares through `prepareAllForHost`, and
+  `BoardProcessor` already scrubs non-finite input and passes dry when a block exceeds the prepared size.
+- This is not a substitute for a real host. It proves the arithmetic and the guards, not that a DAW's bus negotiation
+  lands where we expect; card 8.9 is the packaging and manual validation pass.
+- Card 8.5 (the editor) is deliberately not here. It moves ~1,200 lines of the app's window into a shared component,
+  and this machine cannot build or run the app, so it waits for a green CI run rather than risking the standalone.
+- Verified: typecheck only; the tests themselves run in the macOS `build` CI job.
