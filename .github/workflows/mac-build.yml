@@ -34,7 +34,11 @@ jobs:
         run: cmake --build build --target PumpBoard PumpBoardTests
 
       - name: Run tests
-        run: ./build/PumpBoardTests_artefacts/Release/PumpBoardTests | tail -5
+        run: |
+          set -o pipefail                     # a failing suite must fail the build, not hide behind tail
+          ./build/PumpBoardTests_artefacts/Release/PumpBoardTests > tests.log 2>&1 || { tail -40 tests.log; exit 1; }
+          tail -3 tests.log
+          grep -q " 0 failed" tests.log
 
       - name: Package
         run: |
