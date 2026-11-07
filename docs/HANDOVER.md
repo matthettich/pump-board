@@ -251,10 +251,26 @@ last `NOTES.md` entries. Left:
 2. **`MainContent` is a god object** (~1300 lines: layout, autosave, presets, swap state machine, learn flow, four
    menus, status text, tempo, overlays). Split out a `BoardSession` (autosave, presets, swap) and a `SlotMenus`
    helper before adding more to it. `BoardPrototype`'s painted slots/editor duplicate the real components.
-3. **pump AMP is not on the board yet** — the most guitar-relevant pump effect, and a decision for the owner. It
-   needs (a) the NAM core and its dependencies from pump's `third_party/` (a nested submodule, not fetched here),
-   (b) a way to choose a `.nam` model and a cabinet IR file per slot, and (c) somewhere to save those paths — the
-   board JSON schema is the contract, so a schema change (`version: 2`, a per-slot `files` object) needs a yes first.
+3. **TO DO — add pump AMP (owner approved the schema change, 6 Nov 2026; paused before starting).** The most
+   guitar-relevant pump effect. What it needs:
+   - **Dependencies:** pump's `third_party/NeuralAmpModelerCore` (nested submodule, MIT) and, inside it,
+     `Dependencies/eigen` and `Dependencies/nlohmann`. pump's AMP Makefile builds with `-DNAM_SAMPLE_FLOAT
+     -I<NAM> -isystem <eigen> -I<NAM>/Dependencies/nlohmann` and compiles the NAM core as one unit through
+     `plugins/amp/nam_unity.cpp`; mirror that in `CMakeLists.txt`. In the cloud session the NAM core cloned fine but
+     Eigen (hosted on gitlab.com) did not come through the proxy — on the Mac,
+     `git submodule update --init --recursive` inside `external/pump` should fetch it.
+   - **Adapter:** `PumpAmpAdapter` around `pump::amp::Engine` (input, gate, normalize, mono/stereo, bass/mid/treble/
+     presence, cab on, cab low/high cut, output). Models and IRs load **off the audio thread** through the engine's
+     own `loadModel` / `loadIr` (it swaps them at a block boundary with a fade); never load from `process()`.
+     Latency = the engine's resampler + 64-sample cabinet block, reported whether the cab is on or off.
+   - **UI:** a LOAD MODEL and a LOAD CAB key in the AMP editor (a `FileChooser`, `.nam` and `.wav`), showing the
+     loaded file names; empty means no model / no cab.
+   - **Saving (approved):** board JSON `version: 2` with an optional per-slot `files` object, e.g.
+     `"files": { "model": "/path/x.nam", "ir": "/path/cab.wav" }`. The reader must still accept version 1; update
+     `schemas/board.schema.json`, `BoardSerializer`, `BoardState` (capture/apply) and their tests. A missing file
+     on load is a warning in the warning bar, not a failure.
+   - **Tests:** a null test against `pump::amp::Engine` with no model (and, if feasible, with
+     `third_party/NeuralAmpModelerCore/example_models/lstm.nam`), a v1-and-v2 round trip, a missing-file warning.
 4. **Pages in the editor are 20 controls max**, two rows of ~32 px dials on dense pages (VOX has 3 pages, GRUMBLE,
    ECHO and TUNE 2). Clicking the page keys has only been rendered, not clicked in a live window.
 5. **Not on the board, on purpose:** METER and MASTER (owner's call), ROOM (system correction, not a pedal), the
