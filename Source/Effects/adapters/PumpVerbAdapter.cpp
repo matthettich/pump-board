@@ -1,4 +1,5 @@
 #include "Effects/adapters/PumpVerbAdapter.h"
+#include "Effects/adapters/AssignHelpers.h"
 #include "Effects/adapters/PumpChoices.h"
 #include <cmath>
 #include <cstring>
@@ -79,35 +80,34 @@ void PumpVerbAdapter::setParam (int index, float value) noexcept
 
     switch (index)
     {
-        case kMode:        settings.mode      = juce::jlimit (0, pump::verb::kNumModes - 1, (int) std::lround (value)); break;
-        case kPredelay:    settings.predelayMs = juce::jlimit (0.0, (double) pump::verb::kMaxPredelayMs, (double) value); break;
-        case kSync:        settings.sync      = value >= 0.5f; break;
-        case kNote:        settings.note      = juce::jlimit (0, pump::verb::kMaxSyncNote, (int) std::lround (value)); break;
-        case kSize:        settings.size      = juce::jlimit (0.0, 100.0, (double) value); break;
-        case kDecay:       settings.decay     = juce::jlimit (0.1, 30.0, (double) value); break;
-        case kDiffusion:   settings.diffusion = juce::jlimit (0.0, 100.0, (double) value); break;
-        case kBalance:     settings.balance   = juce::jlimit (-100.0, 100.0, (double) value); break;
-        case kBassMult:    settings.bassMult  = juce::jlimit (0.5, 2.0, (double) value); break;
-        case kCrossover:   settings.crossover = juce::jlimit (50.0, 2000.0, (double) value); break;
-        case kHighDamp:    settings.highDamp  = juce::jlimit (0.1, 1.0, (double) value); break;
-        case kDampFreq:    settings.dampFreq  = juce::jlimit (1000.0, 20000.0, (double) value); break;
-        case kLowCut:      settings.lowCut    = juce::jlimit ((double) pump::verb::kLowCutOff, 1000.0, (double) value); break;
-        case kHighCut:     settings.highCut   = juce::jlimit (1000.0, (double) pump::verb::kHighCutOff, (double) value); break;
-        case kModDepth:    settings.modDepth  = juce::jlimit (0.0, 100.0, (double) value); break;
-        case kModRate:     settings.modRate   = juce::jlimit (0.05, 5.0, (double) value); break;
-        case kWidth:       settings.width     = juce::jlimit (0.0, 150.0, (double) value); break;
-        case kAge:         settings.age       = juce::jlimit (0.0, 100.0, (double) value); break;
-        case kEnvTime:     settings.envTimeMs = juce::jlimit (50.0, 1500.0, (double) value); break;
-        case kPitch:       settings.pitch     = juce::jlimit (-24, 24, (int) std::lround (value)); break;
-        case kShimmer:     settings.shimmer   = juce::jlimit (0.0, 100.0, (double) value); break;
-        case kDuck:        settings.duck      = juce::jlimit (0.0, 100.0, (double) value); break;
-        case kFreeze:      settings.freeze    = value >= 0.5f; break;
-        case kMix:         settings.mix       = juce::jlimit (0.0, 100.0, (double) value); break;
-        case kOutGain:     settings.outDb     = juce::jlimit (-24.0, 24.0, (double) value); break;
+        case kMode:        assignField (settings.mode, juce::jlimit (0, pump::verb::kNumModes - 1, (int) std::lround (value)), dirty); break;
+        case kPredelay:    assignField (settings.predelayMs, juce::jlimit (0.0, (double) pump::verb::kMaxPredelayMs, (double) value), dirty); break;
+        case kSync:        assignField (settings.sync, value >= 0.5f, dirty); break;
+        case kNote:        assignField (settings.note, juce::jlimit (0, pump::verb::kMaxSyncNote, (int) std::lround (value)), dirty); break;
+        case kSize:        assignField (settings.size, juce::jlimit (0.0, 100.0, (double) value), dirty); break;
+        case kDecay:       assignField (settings.decay, juce::jlimit (0.1, 30.0, (double) value), dirty); break;
+        case kDiffusion:   assignField (settings.diffusion, juce::jlimit (0.0, 100.0, (double) value), dirty); break;
+        case kBalance:     assignField (settings.balance, juce::jlimit (-100.0, 100.0, (double) value), dirty); break;
+        case kBassMult:    assignField (settings.bassMult, juce::jlimit (0.5, 2.0, (double) value), dirty); break;
+        case kCrossover:   assignField (settings.crossover, juce::jlimit (50.0, 2000.0, (double) value), dirty); break;
+        case kHighDamp:    assignField (settings.highDamp, juce::jlimit (0.1, 1.0, (double) value), dirty); break;
+        case kDampFreq:    assignField (settings.dampFreq, juce::jlimit (1000.0, 20000.0, (double) value), dirty); break;
+        case kLowCut:      assignField (settings.lowCut, juce::jlimit ((double) pump::verb::kLowCutOff, 1000.0, (double) value), dirty); break;
+        case kHighCut:     assignField (settings.highCut, juce::jlimit (1000.0, (double) pump::verb::kHighCutOff, (double) value), dirty); break;
+        case kModDepth:    assignField (settings.modDepth, juce::jlimit (0.0, 100.0, (double) value), dirty); break;
+        case kModRate:     assignField (settings.modRate, juce::jlimit (0.05, 5.0, (double) value), dirty); break;
+        case kWidth:       assignField (settings.width, juce::jlimit (0.0, 150.0, (double) value), dirty); break;
+        case kAge:         assignField (settings.age, juce::jlimit (0.0, 100.0, (double) value), dirty); break;
+        case kEnvTime:     assignField (settings.envTimeMs, juce::jlimit (50.0, 1500.0, (double) value), dirty); break;
+        case kPitch:       assignField (settings.pitch, juce::jlimit (-24, 24, (int) std::lround (value)), dirty); break;
+        case kShimmer:     assignField (settings.shimmer, juce::jlimit (0.0, 100.0, (double) value), dirty); break;
+        case kDuck:        assignField (settings.duck, juce::jlimit (0.0, 100.0, (double) value), dirty); break;
+        case kFreeze:      assignField (settings.freeze, value >= 0.5f, dirty); break;
+        case kMix:         assignField (settings.mix, juce::jlimit (0.0, 100.0, (double) value), dirty); break;
+        case kOutGain:     assignField (settings.outDb, juce::jlimit (-24.0, 24.0, (double) value), dirty); break;
         default:           return;
     }
 
-    dirty = true;
 }
 
 void PumpVerbAdapter::process (juce::AudioBuffer<float>& buffer) noexcept

@@ -1,4 +1,5 @@
 #include "Effects/adapters/PumpCompAdapter.h"
+#include "Effects/adapters/AssignHelpers.h"
 #include "Effects/adapters/PumpChoices.h"
 #include <cmath>
 #include <cstring>
@@ -71,32 +72,31 @@ void PumpCompAdapter::setParam (int index, float value) noexcept
 
     switch (index)
     {
-        case kStyle:        settings.style        = juce::jlimit (0, 5, (int) std::lround (value)); break;
-        case kThreshold:    settings.threshold    = (double) value; break;
-        case kRatio:        settings.ratio        = (double) value; break;
-        case kKnee:         settings.knee         = (double) value; break;
-        case kRange:        settings.range        = (double) value; break;
-        case kAttack:       settings.attack       = (double) value; break;
-        case kRelease:      settings.release      = (double) value; break;
-        case kAutoRelease:  settings.autoRelease  = value >= 0.5f; break;
-        case kHold:         settings.hold         = (double) value; break;
-        case kLookahead:    settings.lookahead    = (double) value; break;
-        case kMix:          settings.mix          = (double) value; break;
-        case kInGain:       settings.inGain       = (double) value; break;
-        case kOutGain:      settings.outGain      = (double) value; break;
-        case kAutoMakeup:   settings.autoMakeup   = value >= 0.5f; break;
-        case kLink:         settings.link         = (double) value; break;
-        case kChannelMode:  settings.channelMode  = juce::jlimit (0, 3, (int) std::lround (value)); break;
-        case kScSource:     settings.scExternal   = value >= 0.5f; break;
-        case kScGain:       settings.scGain       = (double) value; break;
-        case kScHpf:        settings.scHpf        = (double) value; break;
-        case kScLpf:        settings.scLpf        = (double) value; break;
-        case kScListen:     settings.scListen     = value >= 0.5f; break;
-        case kOversampling: settings.oversampling = juce::jlimit (0, 2, (int) std::lround (value)); break;
+        case kStyle:        assignField (settings.style, juce::jlimit (0, 5, (int) std::lround (value)), dirty); break;
+        case kThreshold:    assignField (settings.threshold, (double) value, dirty); break;
+        case kRatio:        assignField (settings.ratio, (double) value, dirty); break;
+        case kKnee:         assignField (settings.knee, (double) value, dirty); break;
+        case kRange:        assignField (settings.range, (double) value, dirty); break;
+        case kAttack:       assignField (settings.attack, (double) value, dirty); break;
+        case kRelease:      assignField (settings.release, (double) value, dirty); break;
+        case kAutoRelease:  assignField (settings.autoRelease, value >= 0.5f, dirty); break;
+        case kHold:         assignField (settings.hold, (double) value, dirty); break;
+        case kLookahead:    assignField (settings.lookahead, (double) value, dirty); break;
+        case kMix:          assignField (settings.mix, (double) value, dirty); break;
+        case kInGain:       assignField (settings.inGain, (double) value, dirty); break;
+        case kOutGain:      assignField (settings.outGain, (double) value, dirty); break;
+        case kAutoMakeup:   assignField (settings.autoMakeup, value >= 0.5f, dirty); break;
+        case kLink:         assignField (settings.link, (double) value, dirty); break;
+        case kChannelMode:  assignField (settings.channelMode, juce::jlimit (0, 3, (int) std::lround (value)), dirty); break;
+        case kScSource:     assignField (settings.scExternal, value >= 0.5f, dirty); break;
+        case kScGain:       assignField (settings.scGain, (double) value, dirty); break;
+        case kScHpf:        assignField (settings.scHpf, (double) value, dirty); break;
+        case kScLpf:        assignField (settings.scLpf, (double) value, dirty); break;
+        case kScListen:     assignField (settings.scListen, value >= 0.5f, dirty); break;
+        case kOversampling: assignField (settings.oversampling, juce::jlimit (0, 2, (int) std::lround (value)), dirty); break;
         default:            return;
     }
 
-    dirty = true;
 }
 
 void PumpCompAdapter::process (juce::AudioBuffer<float>& buffer) noexcept

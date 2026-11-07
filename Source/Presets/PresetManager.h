@@ -3,6 +3,7 @@
 // program-change number. Files are the card 4.1 format (.board), so slots, macros and mappings all travel.
 #include "Presets/BoardSerializer.h"
 #include <juce_core/juce_core.h>
+#include <functional>
 
 namespace pb
 {
@@ -36,8 +37,19 @@ public:
     bool rename (const juce::File& file, const juce::String& newName) const;
     bool remove (const juce::File& file) const;
 
+    // The Bin. Defaults to File::moveToTrash; a test swaps in one that fails to prove rename does not leave
+    // two copies behind (open item 7).
+    using TrashFunction = std::function<bool (const juce::File&)>;
+    void setTrashFunction (TrashFunction f) { trashFunction = std::move (f); }
+
+    // What a name made only of characters a file cannot hold becomes (open item 7).
+    static juce::String defaultBoardName() { return "Untitled"; }
+
 private:
+    bool trash (const juce::File& file) const { return trashFunction ? trashFunction (file) : file.moveToTrash(); }
+
     juce::File directory;
+    TrashFunction trashFunction;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PresetManager)
 };

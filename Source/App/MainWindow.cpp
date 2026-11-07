@@ -14,6 +14,7 @@
 #include "UI/SettingsView.h"
 #include "UI/SlotView.h"
 #include "UI/TempoField.h"
+#include <cstdint>
 #include <algorithm>
 
 namespace pb
@@ -275,7 +276,7 @@ private:
             model.prepareAll();
         }
 
-        syncSlots();
+        syncSlots (false);                  // the per-tick pass: skipped unless a value or the model moved
         updateBypassLight();
 
         const auto now = juce::Time::currentTimeMillis();
@@ -316,9 +317,34 @@ private:
             updateStatus();
     }
 
-    void syncSlots()
+    // Rebuilds every pedal's text (it copies each pedal's params(), Strings and all, for up to sixteen slots).
+    // The 30 Hz tick passes force = false and then only does the work when something it shows could have changed:
+    // a registry write moved changeCounter() (the on switch and every silk-screened value live there), or the
+    // chain itself differs (count, a slot, a pedal - a swap, insert or remove that no explicit caller announced).
+    // Every place that edits the model calls this with the default and so always refreshes.
+    void syncSlots (bool force = true)
     {
         const int count = model.size();
+
+        uint64_t signature = UINT64_C (1469598103934665603) ^ (uint64_t) count;       // FNV-1a over the chain's identity
+
+        for (int i = 0; i < count; ++i)
+        {
+            const auto* slot = model.at (i);
+            const auto* effect = slot != nullptr ? slot->getEffect() : nullptr;
+
+            for (const auto pointer : { (uintptr_t) slot, (uintptr_t) effect })
+                signature = (signature ^ (uint64_t) pointer) * UINT64_C (1099511628211);
+        }
+
+        const auto counterNow = registry.changeCounter();
+
+        if (! force && syncValid && counterNow == lastSyncCounter && signature == lastSyncSignature)
+            return;
+
+        syncValid = true;
+        lastSyncCounter = counterNow;
+        lastSyncSignature = signature;
 
         for (int i = 0; i < count; ++i)
         {
@@ -1316,6 +1342,9 @@ private:
     int lastBlock = 0;
     int ticks = 0;
     int paintedCount = 0;
+    bool syncValid = false;                 // syncSlots() has run at least once
+    uint32_t lastSyncCounter = 0;           // registry.changeCounter() at the last syncSlots()
+    uint64_t lastSyncSignature = 0;         // identity of the chain at the last syncSlots()
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainContent)
 };

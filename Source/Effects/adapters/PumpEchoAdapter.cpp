@@ -1,4 +1,5 @@
 #include "Effects/adapters/PumpEchoAdapter.h"
+#include "Effects/adapters/AssignHelpers.h"
 #include "Effects/adapters/PumpChoices.h"
 #include <cmath>
 #include <cstring>
@@ -80,34 +81,33 @@ void PumpEchoAdapter::setParam (int index, float value) noexcept
 
     switch (index)
     {
-        case kMode:      settings.mode      = juce::jlimit (0, pump::echo::kNumModes - 1, (int) std::lround (value)); break;
-        case kTimeL:     settings.timeL     = (double) value; break;
-        case kTimeR:     settings.timeR     = (double) value; break;
-        case kSync:      settings.sync      = value >= 0.5f; break;
-        case kNoteL:     settings.noteL     = juce::jlimit (0, pump::kNumNotes - 1, (int) std::lround (value)); break;
-        case kNoteR:     settings.noteR     = juce::jlimit (0, pump::kNumNotes - 1, (int) std::lround (value)); break;
-        case kLink:      settings.link      = value >= 0.5f; break;
-        case kFeedback:  settings.feedback  = (double) value; break;
-        case kStereo:    settings.route     = juce::jlimit (0, pump::echo::kNumRoutes - 1, (int) std::lround (value)); break;
-        case kWidth:     settings.width     = (double) value; break;
-        case kModDepth:  settings.modDepth  = (double) value; break;
-        case kModRate:   settings.modRate   = (double) value; break;
-        case kAge:       settings.age       = (double) value; break;
-        case kDrive:     settings.drive     = (double) value; break;
-        case kLowCut:    settings.lowCut    = (double) value; break;
-        case kHighCut:   settings.highCut   = (double) value; break;
-        case kDiffuse:   settings.diffuse   = (double) value; break;
-        case kDuck:      settings.duck      = (double) value; break;
-        case kFreeze:    settings.freeze    = value >= 0.5f; break;
-        case kPitch:     settings.pitch     = (double) value; break;
-        case kFine:      settings.fine      = (double) value; break;
-        case kPitchMode: settings.pitchMode = juce::jlimit (0, pump::echo::kNumShifts - 1, (int) std::lround (value)); break;
-        case kMix:       settings.mix       = (double) value; break;
-        case kOutGain:   settings.outDb     = (double) value; break;
+        case kMode:      assignField (settings.mode, juce::jlimit (0, pump::echo::kNumModes - 1, (int) std::lround (value)), dirty); break;
+        case kTimeL:     assignField (settings.timeL, (double) value, dirty); break;
+        case kTimeR:     assignField (settings.timeR, (double) value, dirty); break;
+        case kSync:      assignField (settings.sync, value >= 0.5f, dirty); break;
+        case kNoteL:     assignField (settings.noteL, juce::jlimit (0, pump::kNumNotes - 1, (int) std::lround (value)), dirty); break;
+        case kNoteR:     assignField (settings.noteR, juce::jlimit (0, pump::kNumNotes - 1, (int) std::lround (value)), dirty); break;
+        case kLink:      assignField (settings.link, value >= 0.5f, dirty); break;
+        case kFeedback:  assignField (settings.feedback, (double) value, dirty); break;
+        case kStereo:    assignField (settings.route, juce::jlimit (0, pump::echo::kNumRoutes - 1, (int) std::lround (value)), dirty); break;
+        case kWidth:     assignField (settings.width, (double) value, dirty); break;
+        case kModDepth:  assignField (settings.modDepth, (double) value, dirty); break;
+        case kModRate:   assignField (settings.modRate, (double) value, dirty); break;
+        case kAge:       assignField (settings.age, (double) value, dirty); break;
+        case kDrive:     assignField (settings.drive, (double) value, dirty); break;
+        case kLowCut:    assignField (settings.lowCut, (double) value, dirty); break;
+        case kHighCut:   assignField (settings.highCut, (double) value, dirty); break;
+        case kDiffuse:   assignField (settings.diffuse, (double) value, dirty); break;
+        case kDuck:      assignField (settings.duck, (double) value, dirty); break;
+        case kFreeze:    assignField (settings.freeze, value >= 0.5f, dirty); break;
+        case kPitch:     assignField (settings.pitch, (double) value, dirty); break;
+        case kFine:      assignField (settings.fine, (double) value, dirty); break;
+        case kPitchMode: assignField (settings.pitchMode, juce::jlimit (0, pump::echo::kNumShifts - 1, (int) std::lround (value)), dirty); break;
+        case kMix:       assignField (settings.mix, (double) value, dirty); break;
+        case kOutGain:   assignField (settings.outDb, (double) value, dirty); break;
         default:         return;
     }
 
-    dirty = true;
 }
 
 void PumpEchoAdapter::process (juce::AudioBuffer<float>& buffer) noexcept

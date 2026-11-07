@@ -62,6 +62,11 @@ public:
     double getSampleRateHz() const noexcept { return sampleRateHz; }
     int getMaxBlock() const noexcept { return maxBlock; }
 
+    // The deepest chain latency (frames) the board's dry ring compensates: four slots' worth, ceil(1.4 s), at
+    // least 16384 (open item 3).
+    static int maxDryDelayFor (double sampleRate) noexcept;
+    int getMaxDryDelay() const noexcept { return maxDryDelay; }
+
 private:
     ParameterRegistry& registry;
     MidiRouter& midiRouter;
@@ -86,6 +91,7 @@ private:
     // position, which is why this scaffold header gained one int; see NOTES.md, card 5.4.)
     juce::AudioBuffer<float> dryBuffer;         // sized in prepareToPlay: one block plus the delay ring
     int dryWritePos = 0;                        // audio thread only
+    int maxDryDelay = 16384;                    // set in prepareToPlay from the sample rate (open item 3)
     SafetyLimiter limiter;                      // card 2.3: always on, the last stage
     juce::SmoothedValue<float> boardWet, inGain, outGain;
     std::atomic<float> inPeak { 0.0f }, outPeak { 0.0f };

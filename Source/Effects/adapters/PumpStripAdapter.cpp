@@ -1,4 +1,5 @@
 #include "Effects/adapters/PumpStripAdapter.h"
+#include "Effects/adapters/AssignHelpers.h"
 #include "Effects/adapters/PumpChoices.h"
 #include <cmath>
 #include <cstring>
@@ -81,47 +82,46 @@ void PumpStripAdapter::setParam (int index, float value) noexcept
 
     switch (index)
     {
-        case kModel:       settings.model      = juce::jlimit (0, pump::strip::kNumModels - 1, (int) std::lround (value)); break;
-        case kInput:       settings.input      = juce::jlimit (-12.0f, 24.0f, value); break;
-        case kColor:       settings.color      = juce::jlimit (0.0f, 100.0f, value); break;
-        case kPhase:       settings.phase      = value >= 0.5f; break;
-        case kHpf:         settings.hpf        = juce::jlimit (pump::strip::kHpfOff, 800.0f, value); break;
-        case kLpf:         settings.lpf        = juce::jlimit (1000.0f, pump::strip::kLpfOff, value); break;
-        case kEqOn:        settings.eqOn       = value >= 0.5f; break;
-        case kLfGain:      settings.g[0]       = juce::jlimit (-16.0f, 16.0f, value); break;
-        case kLfFreq:      settings.f[0]       = juce::jlimit (20.0f, 800.0f, value); break;
-        case kLfBell:      settings.lfBell     = value >= 0.5f; break;
-        case kLmfGain:     settings.g[1]       = juce::jlimit (-16.0f, 16.0f, value); break;
-        case kLmfFreq:     settings.f[1]       = juce::jlimit (60.0f, 3000.0f, value); break;
-        case kLmfQ:        settings.q[1]       = juce::jlimit (0.3f, 5.0f, value); break;
-        case kHmfGain:     settings.g[2]       = juce::jlimit (-16.0f, 16.0f, value); break;
-        case kHmfFreq:     settings.f[2]       = juce::jlimit (500.0f, 14000.0f, value); break;
-        case kHmfQ:        settings.q[2]       = juce::jlimit (0.3f, 5.0f, value); break;
-        case kHfGain:      settings.g[3]       = juce::jlimit (-16.0f, 16.0f, value); break;
-        case kHfFreq:      settings.f[3]       = juce::jlimit (1500.0f, 20000.0f, value); break;
-        case kHfBell:      settings.hfBell     = value >= 0.5f; break;
-        case kGateOn:      settings.gateOn     = value >= 0.5f; break;
-        case kGateThresh:  settings.gateThresh = juce::jlimit (-80.0f, 0.0f, value); break;
-        case kGateRange:   settings.gateRange  = juce::jlimit (0.0f, 80.0f, value); break;
-        case kGateRelease: settings.gateRelease = juce::jlimit (5.0f, 2000.0f, value); break;
-        case kGateMode:    settings.gateMode   = juce::jlimit (0, 1, (int) std::lround (value)); break;
-        case kCompOn:      settings.compOn     = value >= 0.5f; break;
-        case kCompThresh:  settings.thresh     = juce::jlimit (-50.0f, 0.0f, value); break;
-        case kCompRatio:   settings.ratio      = juce::jlimit (1.0f, 20.0f, value); break;
-        case kCompAttack:  settings.attack     = juce::jlimit (0.1f, 100.0f, value); break;
-        case kCompRelease: settings.release    = juce::jlimit (20.0f, 2000.0f, value); break;
-        case kCompAuto:    settings.autoRel    = value >= 0.5f; break;
-        case kCompMakeup:  settings.makeup     = juce::jlimit (0.0f, 24.0f, value); break;
-        case kCompMix:     settings.mix        = juce::jlimit (0.0f, 100.0f, value); break;
-        case kScHpf:       settings.scHpf      = juce::jlimit (pump::strip::kScOff, 500.0f, value); break;
-        case kOrder:       settings.order      = juce::jlimit (0, 1, (int) std::lround (value)); break;
-        case kOutGain:     settings.outDb      = juce::jlimit (-24.0f, 24.0f, value); break;
-        case kAutoGain:    settings.autoGain   = value >= 0.5f; break;
-        case kOversampling: settings.oversampling = juce::jlimit (0, 2, (int) std::lround (value)); break;
+        case kModel:       assignField (settings.model, juce::jlimit (0, pump::strip::kNumModels - 1, (int) std::lround (value)), dirty); break;
+        case kInput:       assignField (settings.input, juce::jlimit (-12.0f, 24.0f, value), dirty); break;
+        case kColor:       assignField (settings.color, juce::jlimit (0.0f, 100.0f, value), dirty); break;
+        case kPhase:       assignField (settings.phase, value >= 0.5f, dirty); break;
+        case kHpf:         assignField (settings.hpf, juce::jlimit (pump::strip::kHpfOff, 800.0f, value), dirty); break;
+        case kLpf:         assignField (settings.lpf, juce::jlimit (1000.0f, pump::strip::kLpfOff, value), dirty); break;
+        case kEqOn:        assignField (settings.eqOn, value >= 0.5f, dirty); break;
+        case kLfGain:      assignField (settings.g[0], juce::jlimit (-16.0f, 16.0f, value), dirty); break;
+        case kLfFreq:      assignField (settings.f[0], juce::jlimit (20.0f, 800.0f, value), dirty); break;
+        case kLfBell:      assignField (settings.lfBell, value >= 0.5f, dirty); break;
+        case kLmfGain:     assignField (settings.g[1], juce::jlimit (-16.0f, 16.0f, value), dirty); break;
+        case kLmfFreq:     assignField (settings.f[1], juce::jlimit (60.0f, 3000.0f, value), dirty); break;
+        case kLmfQ:        assignField (settings.q[1], juce::jlimit (0.3f, 5.0f, value), dirty); break;
+        case kHmfGain:     assignField (settings.g[2], juce::jlimit (-16.0f, 16.0f, value), dirty); break;
+        case kHmfFreq:     assignField (settings.f[2], juce::jlimit (500.0f, 14000.0f, value), dirty); break;
+        case kHmfQ:        assignField (settings.q[2], juce::jlimit (0.3f, 5.0f, value), dirty); break;
+        case kHfGain:      assignField (settings.g[3], juce::jlimit (-16.0f, 16.0f, value), dirty); break;
+        case kHfFreq:      assignField (settings.f[3], juce::jlimit (1500.0f, 20000.0f, value), dirty); break;
+        case kHfBell:      assignField (settings.hfBell, value >= 0.5f, dirty); break;
+        case kGateOn:      assignField (settings.gateOn, value >= 0.5f, dirty); break;
+        case kGateThresh:  assignField (settings.gateThresh, juce::jlimit (-80.0f, 0.0f, value), dirty); break;
+        case kGateRange:   assignField (settings.gateRange, juce::jlimit (0.0f, 80.0f, value), dirty); break;
+        case kGateRelease: assignField (settings.gateRelease, juce::jlimit (5.0f, 2000.0f, value), dirty); break;
+        case kGateMode:    assignField (settings.gateMode, juce::jlimit (0, 1, (int) std::lround (value)), dirty); break;
+        case kCompOn:      assignField (settings.compOn, value >= 0.5f, dirty); break;
+        case kCompThresh:  assignField (settings.thresh, juce::jlimit (-50.0f, 0.0f, value), dirty); break;
+        case kCompRatio:   assignField (settings.ratio, juce::jlimit (1.0f, 20.0f, value), dirty); break;
+        case kCompAttack:  assignField (settings.attack, juce::jlimit (0.1f, 100.0f, value), dirty); break;
+        case kCompRelease: assignField (settings.release, juce::jlimit (20.0f, 2000.0f, value), dirty); break;
+        case kCompAuto:    assignField (settings.autoRel, value >= 0.5f, dirty); break;
+        case kCompMakeup:  assignField (settings.makeup, juce::jlimit (0.0f, 24.0f, value), dirty); break;
+        case kCompMix:     assignField (settings.mix, juce::jlimit (0.0f, 100.0f, value), dirty); break;
+        case kScHpf:       assignField (settings.scHpf, juce::jlimit (pump::strip::kScOff, 500.0f, value), dirty); break;
+        case kOrder:       assignField (settings.order, juce::jlimit (0, 1, (int) std::lround (value)), dirty); break;
+        case kOutGain:     assignField (settings.outDb, juce::jlimit (-24.0f, 24.0f, value), dirty); break;
+        case kAutoGain:    assignField (settings.autoGain, value >= 0.5f, dirty); break;
+        case kOversampling: assignField (settings.oversampling, juce::jlimit (0, 2, (int) std::lround (value)), dirty); break;
         default:           return;
     }
 
-    dirty = true;
 }
 
 void PumpStripAdapter::process (juce::AudioBuffer<float>& buffer) noexcept

@@ -1,4 +1,5 @@
 #include "Effects/adapters/PumpGrainAdapter.h"
+#include "Effects/adapters/AssignHelpers.h"
 #include "Effects/adapters/PumpChoices.h"
 #include <cmath>
 #include <cstring>
@@ -82,34 +83,33 @@ void PumpGrainAdapter::setParam (int index, float value) noexcept
 
     switch (index)
     {
-        case kPosition:    settings.positionMs    = juce::jlimit (0.0, 4000.0, (double) value); break;
-        case kSize:        settings.sizeMs        = juce::jlimit (5.0, 1000.0, (double) value); break;
-        case kDensity:     settings.density       = juce::jlimit (1.0, 100.0, (double) value); break;
-        case kSpray:       settings.spray         = juce::jlimit (0.0, 100.0, (double) value); break;
-        case kSync:        settings.sync          = value >= 0.5f; break;
-        case kDivision:    settings.division      = juce::jlimit (0, pump::kNumNotes - 1, (int) std::lround (value)); break;
-        case kEnvelope:    settings.envelope      = juce::jlimit (0, pump::grain::kNumEnvelopes - 1, (int) std::lround (value)); break;
-        case kReverse:     settings.reverse       = juce::jlimit (0.0, 100.0, (double) value); break;
-        case kStereo:      settings.stereo        = juce::jlimit (0.0, 100.0, (double) value); break;
-        case kPitch:       settings.pitch         = juce::jlimit (-24.0, 24.0, (double) value); break;
-        case kPitchSpread: settings.pitchSpread   = juce::jlimit (0.0, 24.0, (double) value); break;
-        case kQuantize:    settings.quantize      = juce::jlimit (0, pump::grain::kNumScales - 1, (int) std::lround (value)); break;
-        case kFeedback:    settings.feedback      = juce::jlimit (0.0, 100.0, (double) value); break;
-        case kFilter:      settings.filter        = juce::jlimit (0, pump::grain::kNumFilterModes - 1, (int) std::lround (value)); break;
-        case kCutoff:      settings.cutoff        = juce::jlimit (20.0, 20000.0, (double) value); break;
-        case kResonance:   settings.resonance     = juce::jlimit (0.0, 100.0, (double) value); break;
-        case kSpace:       settings.space         = juce::jlimit (0.0, 100.0, (double) value); break;
-        case kMotionRate:  settings.motionRate    = juce::jlimit (0.02, 10.0, (double) value); break;
-        case kMotionDepth: settings.motionDepth   = juce::jlimit (0.0, 100.0, (double) value); break;
-        case kMorphX:      settings.morphX        = juce::jlimit (-100.0, 100.0, (double) value); break;
-        case kMorphY:      settings.morphY        = juce::jlimit (-100.0, 100.0, (double) value); break;
-        case kFreeze:      settings.freeze        = value >= 0.5f; break;
-        case kMix:         settings.mix           = juce::jlimit (0.0, 100.0, (double) value); break;
-        case kOutGain:     settings.outDb         = juce::jlimit (-24.0, 24.0, (double) value); break;
+        case kPosition:    assignField (settings.positionMs, juce::jlimit (0.0, 4000.0, (double) value), dirty); break;
+        case kSize:        assignField (settings.sizeMs, juce::jlimit (5.0, 1000.0, (double) value), dirty); break;
+        case kDensity:     assignField (settings.density, juce::jlimit (1.0, 100.0, (double) value), dirty); break;
+        case kSpray:       assignField (settings.spray, juce::jlimit (0.0, 100.0, (double) value), dirty); break;
+        case kSync:        assignField (settings.sync, value >= 0.5f, dirty); break;
+        case kDivision:    assignField (settings.division, juce::jlimit (0, pump::kNumNotes - 1, (int) std::lround (value)), dirty); break;
+        case kEnvelope:    assignField (settings.envelope, juce::jlimit (0, pump::grain::kNumEnvelopes - 1, (int) std::lround (value)), dirty); break;
+        case kReverse:     assignField (settings.reverse, juce::jlimit (0.0, 100.0, (double) value), dirty); break;
+        case kStereo:      assignField (settings.stereo, juce::jlimit (0.0, 100.0, (double) value), dirty); break;
+        case kPitch:       assignField (settings.pitch, juce::jlimit (-24.0, 24.0, (double) value), dirty); break;
+        case kPitchSpread: assignField (settings.pitchSpread, juce::jlimit (0.0, 24.0, (double) value), dirty); break;
+        case kQuantize:    assignField (settings.quantize, juce::jlimit (0, pump::grain::kNumScales - 1, (int) std::lround (value)), dirty); break;
+        case kFeedback:    assignField (settings.feedback, juce::jlimit (0.0, 100.0, (double) value), dirty); break;
+        case kFilter:      assignField (settings.filter, juce::jlimit (0, pump::grain::kNumFilterModes - 1, (int) std::lround (value)), dirty); break;
+        case kCutoff:      assignField (settings.cutoff, juce::jlimit (20.0, 20000.0, (double) value), dirty); break;
+        case kResonance:   assignField (settings.resonance, juce::jlimit (0.0, 100.0, (double) value), dirty); break;
+        case kSpace:       assignField (settings.space, juce::jlimit (0.0, 100.0, (double) value), dirty); break;
+        case kMotionRate:  assignField (settings.motionRate, juce::jlimit (0.02, 10.0, (double) value), dirty); break;
+        case kMotionDepth: assignField (settings.motionDepth, juce::jlimit (0.0, 100.0, (double) value), dirty); break;
+        case kMorphX:      assignField (settings.morphX, juce::jlimit (-100.0, 100.0, (double) value), dirty); break;
+        case kMorphY:      assignField (settings.morphY, juce::jlimit (-100.0, 100.0, (double) value), dirty); break;
+        case kFreeze:      assignField (settings.freeze, value >= 0.5f, dirty); break;
+        case kMix:         assignField (settings.mix, juce::jlimit (0.0, 100.0, (double) value), dirty); break;
+        case kOutGain:     assignField (settings.outDb, juce::jlimit (-24.0, 24.0, (double) value), dirty); break;
         default:           return;
     }
 
-    dirty = true;
 }
 
 void PumpGrainAdapter::process (juce::AudioBuffer<float>& buffer) noexcept

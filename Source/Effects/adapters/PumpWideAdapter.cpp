@@ -1,4 +1,5 @@
 #include "Effects/adapters/PumpWideAdapter.h"
+#include "Effects/adapters/AssignHelpers.h"
 #include "Effects/adapters/PumpChoices.h"
 #include <cmath>
 #include <cstring>
@@ -73,11 +74,9 @@ void PumpWideAdapter::setParam (int index, float value) noexcept
         if (b >= 0 && b < pump::wide::kNumBands)
         {
             if (isWidth)
-                settings.band[b].width = juce::jlimit (0.0f, 200.0f, value);
+                assignField (settings.band[b].width, juce::jlimit (0.0f, 200.0f, value), dirty);
             else
-                settings.band[b].stereoize = juce::jlimit (0.0f, 100.0f, value);
-
-            dirty = true;
+                assignField (settings.band[b].stereoize, juce::jlimit (0.0f, 100.0f, value), dirty);
         }
 
         return;
@@ -85,20 +84,19 @@ void PumpWideAdapter::setParam (int index, float value) noexcept
 
     switch (index)
     {
-        case kOutGain:   settings.outDb   = juce::jlimit (-24.0f, 24.0f, value); break;
-        case kBalance:   settings.balance = juce::jlimit (-100.0f, 100.0f, value); break;
-        case kMonoBass:  settings.monoBass = value >= 0.5f; break;
-        case kMonoFreq:  settings.monoFreq = juce::jlimit (20.0f, 500.0f, value); break;
-        case kMonoSlope: settings.monoSlope = juce::jlimit (0, 1, (int) std::lround (value)); break;
-        case kXoverMode: settings.xoverMode = juce::jlimit (0, 1, (int) std::lround (value)); break;
-        case kBands:     settings.bands   = juce::jlimit (1, pump::wide::kNumBands, (int) std::lround (value)); break;
-        case kXover1:    settings.xover[0] = juce::jlimit (20.0f, 20000.0f, value); break;
-        case kXover2:    settings.xover[1] = juce::jlimit (20.0f, 20000.0f, value); break;
-        case kXover3:    settings.xover[2] = juce::jlimit (20.0f, 20000.0f, value); break;
+        case kOutGain:   assignField (settings.outDb, juce::jlimit (-24.0f, 24.0f, value), dirty); break;
+        case kBalance:   assignField (settings.balance, juce::jlimit (-100.0f, 100.0f, value), dirty); break;
+        case kMonoBass:  assignField (settings.monoBass, value >= 0.5f, dirty); break;
+        case kMonoFreq:  assignField (settings.monoFreq, juce::jlimit (20.0f, 500.0f, value), dirty); break;
+        case kMonoSlope: assignField (settings.monoSlope, juce::jlimit (0, 1, (int) std::lround (value)), dirty); break;
+        case kXoverMode: assignField (settings.xoverMode, juce::jlimit (0, 1, (int) std::lround (value)), dirty); break;
+        case kBands:     assignField (settings.bands, juce::jlimit (1, pump::wide::kNumBands, (int) std::lround (value)), dirty); break;
+        case kXover1:    assignField (settings.xover[0], juce::jlimit (20.0f, 20000.0f, value), dirty); break;
+        case kXover2:    assignField (settings.xover[1], juce::jlimit (20.0f, 20000.0f, value), dirty); break;
+        case kXover3:    assignField (settings.xover[2], juce::jlimit (20.0f, 20000.0f, value), dirty); break;
         default:         return;
     }
 
-    dirty = true;
 }
 
 void PumpWideAdapter::process (juce::AudioBuffer<float>& buffer) noexcept

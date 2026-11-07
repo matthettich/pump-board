@@ -35,6 +35,7 @@ private:
 
     float inDb = -60.0f, outDb = -60.0f;
     float inHoldDb = -60.0f, outHoldDb = -60.0f;
+    float shownInTrim = 1.0e9f, shownOutTrim = 1.0e9f;   // trim read-outs as last painted (open item 4)
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MeterBar)
 };

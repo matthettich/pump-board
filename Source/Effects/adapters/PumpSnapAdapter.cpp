@@ -1,4 +1,5 @@
 #include "Effects/adapters/PumpSnapAdapter.h"
+#include "Effects/adapters/AssignHelpers.h"
 #include "Effects/adapters/PumpChoices.h"
 #include <cmath>
 #include <cstring>
@@ -57,24 +58,23 @@ void PumpSnapAdapter::setParam (int index, float value) noexcept
 
     switch (index)
     {
-        case kAttack:     settings.attack      = juce::jlimit (-100.0, 100.0, (double) value); break;
-        case kSustain:    settings.sustain     = juce::jlimit (-100.0, 100.0, (double) value); break;
-        case kAttackTime: settings.attackMs    = juce::jlimit (1.0, 100.0, (double) value); break;
-        case kRelease:    settings.releaseMs   = juce::jlimit (20.0, 2000.0, (double) value); break;
-        case kLink:       settings.link        = juce::jlimit (0.0, 100.0, (double) value); break;
-        case kFocus:      settings.focus       = juce::jlimit (0, pump::snap::kNumFocus - 1, (int) std::lround (value)); break;
-        case kBand:       settings.band        = juce::jlimit (0, pump::snap::kNumBands - 1, (int) std::lround (value)); break;
-        case kCrossover:  settings.crossover   = juce::jlimit (40.0, 8000.0, (double) value); break;
-        case kLookahead:  settings.lookaheadMs = juce::jlimit (0.0, (double) pump::snap::kMaxLookaheadMs, (double) value); break;
-        case kClip:       settings.clip        = value >= 0.5f; break;
-        case kCeiling:    settings.ceilingDb   = juce::jlimit (-12.0, 0.0, (double) value); break;
-        case kDelta:      settings.delta       = value >= 0.5f; break;
-        case kMix:        settings.mix         = juce::jlimit (0.0, 100.0, (double) value); break;
-        case kOutGain:    settings.outDb       = juce::jlimit (-24.0, 24.0, (double) value); break;
+        case kAttack:     assignField (settings.attack, juce::jlimit (-100.0, 100.0, (double) value), dirty); break;
+        case kSustain:    assignField (settings.sustain, juce::jlimit (-100.0, 100.0, (double) value), dirty); break;
+        case kAttackTime: assignField (settings.attackMs, juce::jlimit (1.0, 100.0, (double) value), dirty); break;
+        case kRelease:    assignField (settings.releaseMs, juce::jlimit (20.0, 2000.0, (double) value), dirty); break;
+        case kLink:       assignField (settings.link, juce::jlimit (0.0, 100.0, (double) value), dirty); break;
+        case kFocus:      assignField (settings.focus, juce::jlimit (0, pump::snap::kNumFocus - 1, (int) std::lround (value)), dirty); break;
+        case kBand:       assignField (settings.band, juce::jlimit (0, pump::snap::kNumBands - 1, (int) std::lround (value)), dirty); break;
+        case kCrossover:  assignField (settings.crossover, juce::jlimit (40.0, 8000.0, (double) value), dirty); break;
+        case kLookahead:  assignField (settings.lookaheadMs, juce::jlimit (0.0, (double) pump::snap::kMaxLookaheadMs, (double) value), dirty); break;
+        case kClip:       assignField (settings.clip, value >= 0.5f, dirty); break;
+        case kCeiling:    assignField (settings.ceilingDb, juce::jlimit (-12.0, 0.0, (double) value), dirty); break;
+        case kDelta:      assignField (settings.delta, value >= 0.5f, dirty); break;
+        case kMix:        assignField (settings.mix, juce::jlimit (0.0, 100.0, (double) value), dirty); break;
+        case kOutGain:    assignField (settings.outDb, juce::jlimit (-24.0, 24.0, (double) value), dirty); break;
         default:          return;
     }
 
-    dirty = true;
 }
 
 void PumpSnapAdapter::process (juce::AudioBuffer<float>& buffer) noexcept

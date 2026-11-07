@@ -675,3 +675,30 @@ Scaffold headers touched: `Slot.h` (makeSuccessor, ownsRegistrations, preparedBl
 - Not verified: anything on the Neo — clang's warnings, CoreAudio, a real device change mid-play (the
   `detachChain` wait), swapping a pedal while playing, how the skin looks at Retina scale, and the Settings
   overlay's device selector in the new look-and-feel (no device on the Linux box, so it was never rendered).
+
+## Open items 1, 3, 4, 6, 7, 8 from the 6 Nov review (pass of 6 Nov, Linux)
+
+- **Item 1, dirty only on change.** New `Source/Effects/adapters/AssignHelpers.h` (`assignField (field, value, dirty)`,
+  exact compare written with `<`/`>` so `-Wfloat-equal` stays quiet). Every adapter's `setParam` (BAND, CALM, CHOP,
+  COMP, CRUSH, ECHO, EQ, GATE, GRAIN, HEAT, LIMIT, SNAP, SPRING, STRIP, STUTTER, SWIRL, TONE, TUBE, VERB, WIDE) uses it;
+  `prepare()`/`reset()` still leave `dirty = true`, so the change pending after prepare (the setSettings landmine) is
+  unchanged. TWANG was left as it was. Null tests are unchanged (difference 0.0 everywhere except WIDE's balanced
+  two-band case, which is the known exception and varies run to run with the same binary).
+  TUBE oversampling: a request back to what the engine already runs now also drops a stale pending request; and since
+  other params no longer re-push `settings.oversampling` every block, the wait-for-silence rule (card 5.33) now holds
+  in a live slot (before, any dirty param pushed the new oversampling at once). Not verified by ear.
+- **Item 3.** `Slot::maxDelayFor` / `BoardProcessor::maxDryDelayFor`; `Slot.h` and `BoardProcessor.h` (scaffold)
+  gained a static, a getter and one int member each. Allocation stays in `prepare` / `prepareToPlay`.
+- **Item 4.** Editor, macro strip and meters repaint when what they draw changed. `MainContent::syncSlots (false)` on
+  the tick skips when `changeCounter()` and a hash of the chain (slot and pedal pointers, count) are unchanged;
+  every explicit caller still forces it.
+- **Item 6.** `GenericEffectEditor::resized` tries one to three balanced rows and keeps the one with the biggest knob
+  whose names still fit; a dense pedal still under 40 px borrows 8 px from under the caption. Checked by `--render-editor`
+  for ECHO and TUBE only (Linux, 1100 px wide).
+- **Item 7.** `fileFor` falls back to "Untitled" and strips leading dots; case-only rename goes through a hidden temp
+  file; `rename` undoes its new copy when the Bin refuses; `PresetManager::setTrashFunction` exists so a test can make
+  it refuse. The case-insensitive path itself (macOS) is exercised on Linux only through the same temp-name route.
+- **Item 8.** `MidiRouter`'s side table is a push-only linked list of `RouterState` nodes (freed at static teardown),
+  so any number of routers get a retire list; the audio thread only walks it with acquire loads. A use-after-free is not
+  observable from a test, so `Tests/OpenItemsTests.cpp` pins the behaviour with twenty live routers.
+- Tests: new `Tests/OpenItemsTests.cpp`.

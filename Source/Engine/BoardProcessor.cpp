@@ -128,6 +128,11 @@ void BoardProcessor::collectGarbage()
                       retireList.end());
 }
 
+int BoardProcessor::maxDryDelayFor (double sampleRate) noexcept
+{
+    return juce::jmax (16384, 4 * Slot::maxDelayFor (sampleRate));
+}
+
 void BoardProcessor::prepareToPlay (double newSampleRate, int maximumExpectedSamplesPerBlock)
 {
     sampleRateHz = newSampleRate > 0.0 ? newSampleRate : 48000.0;
@@ -144,8 +149,8 @@ void BoardProcessor::prepareToPlay (double newSampleRate, int maximumExpectedSam
 
     // Card 5.4: the dry path is a delay ring, one block plus the deepest latency a board can hold (16384 frames is
     // 340 ms at 48k — COMP's 20 ms of lookahead at 4x oversampling and CALM's 8192-point FFT both fit).
-    constexpr int kMaxDryDelay = 16384;
-    dryBuffer.setSize (2, maxBlock + kMaxDryDelay, false, true, false);
+    maxDryDelay = maxDryDelayFor (sampleRateHz);
+    dryBuffer.setSize (2, maxBlock + maxDryDelay, false, true, false);
     dryBuffer.clear();
     dryWritePos = 0;
 
@@ -241,7 +246,6 @@ void BoardProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiB
     //    a pedal that reports latency no longer makes the board bypass a comb of two misaligned copies of the
     //    same signal. The sum is recomputed per block (at most sixteen virtual calls) because lookahead and
     //    oversampling can change it while the board is playing.
-    constexpr int kMaxDryDelay = 16384;
     int chainLatency = 0;
 
     if (snapshot != nullptr)
@@ -250,7 +254,7 @@ void BoardProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiB
                 if (auto* fx = slot->getEffect())
                     chainLatency += fx->latencySamples();   // an off slot keeps its latency (see Slot::process)
 
-    chainLatency = juce::jlimit (0, kMaxDryDelay, chainLatency);
+    chainLatency = juce::jlimit (0, maxDryDelay, chainLatency);
 
     const int ringSize = dryBuffer.getNumSamples();
     const bool haveDryCopy = numSamples <= ringSize && numSamples + chainLatency <= ringSize;

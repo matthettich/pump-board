@@ -96,9 +96,16 @@ Slot::Slot (const Slot& previous, AdoptSwitch)
     load::registerSlot (this);
 }
 
+int Slot::maxDelayFor (double sampleRate) noexcept
+{
+    const double rate = sampleRate > 0.0 ? sampleRate : 48000.0;
+    return juce::jmax (kMaxDelaySamples, (int) std::ceil (0.35 * rate));
+}
+
 void Slot::prepare (double sampleRate, int maxBlockSize)
 {
-    dryBuffer.setSize (2, juce::jmax (1, maxBlockSize) + kMaxDelaySamples, false, true, false);
+    maxDelay = maxDelayFor (sampleRate);
+    dryBuffer.setSize (2, juce::jmax (1, maxBlockSize) + maxDelay, false, true, false);
     dryBuffer.clear();
     dryWritePos = 0;
     preparedBlock = juce::jmax (1, maxBlockSize);
@@ -140,7 +147,7 @@ void Slot::process (juce::AudioBuffer<float>& buffer) noexcept
     // 2. the dry signal, taken before the effect touches the buffer, into the delay ring. Card 5.4: it is read
     //    back `latency` frames later, so a pedal that reports latency (TUBE, CRUSH, SWIRL, COMP) does not comb
     //    the crossfade when its slot is switched off.
-    const int latency = juce::jlimit (0, kMaxDelaySamples, effect->latencySamples());
+    const int latency = juce::jlimit (0, maxDelay, effect->latencySamples());
 
     for (int ch = 0; ch < numChannels; ++ch)
     {

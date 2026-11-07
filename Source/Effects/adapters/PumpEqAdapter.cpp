@@ -1,4 +1,5 @@
 #include "Effects/adapters/PumpEqAdapter.h"
+#include "Effects/adapters/AssignHelpers.h"
 #include "Effects/adapters/PumpChoices.h"
 #include <cmath>
 #include <cstring>
@@ -76,32 +77,29 @@ void PumpEqAdapter::setParam (int index, float value) noexcept
 
         switch (field)
         {
-            case 0: band.used  = value >= 0.5f; break;
-            case 1: band.shape = juce::jlimit (0, (int) pump::Shape::Count - 1, (int) std::lround (value)); break;
-            case 2: band.freq  = juce::jlimit (10.0f, 30000.0f, value); break;
-            case 3: band.gainDb = juce::jlimit (-30.0f, 30.0f, value); break;
-            case 4: band.q     = juce::jlimit (0.025f, 40.0f, value); break;
-            case 5: band.dyn   = value >= 0.5f; break;
+            case 0: assignField (band.used, value >= 0.5f, dirty); break;
+            case 1: assignField (band.shape, juce::jlimit (0, (int) pump::Shape::Count - 1, (int) std::lround (value)), dirty); break;
+            case 2: assignField (band.freq, juce::jlimit (10.0f, 30000.0f, value), dirty); break;
+            case 3: assignField (band.gainDb, juce::jlimit (-30.0f, 30.0f, value), dirty); break;
+            case 4: assignField (band.q, juce::jlimit (0.025f, 40.0f, value), dirty); break;
+            case 5: assignField (band.dyn, value >= 0.5f, dirty); break;
             default: return;
         }
-
-        dirty = true;
         return;
     }
 
     switch (index)
     {
-        case kOutGain:    settings.outDb         = juce::jlimit (-36.0f, 36.0f, value); break;
-        case kGainScale:  settings.gainScale     = juce::jlimit (-100.0f, 200.0f, value); break;
-        case kAutoGain:   settings.autoGain      = value >= 0.5f; break;
-        case kPhase:      settings.phase         = juce::jlimit (0, 1, (int) std::lround (value)); break;
-        case kLinQuality: settings.linQuality    = juce::jlimit (0, 3, (int) std::lround (value)); break;
-        case kDynAttack:  settings.dynAttackMs   = juce::jlimit (0.5f, 200.0f, value); break;
-        case kDynRelease: settings.dynReleaseMs  = juce::jlimit (10.0f, 2000.0f, value); break;
+        case kOutGain:    assignField (settings.outDb, juce::jlimit (-36.0f, 36.0f, value), dirty); break;
+        case kGainScale:  assignField (settings.gainScale, juce::jlimit (-100.0f, 200.0f, value), dirty); break;
+        case kAutoGain:   assignField (settings.autoGain, value >= 0.5f, dirty); break;
+        case kPhase:      assignField (settings.phase, juce::jlimit (0, 1, (int) std::lround (value)), dirty); break;
+        case kLinQuality: assignField (settings.linQuality, juce::jlimit (0, 3, (int) std::lround (value)), dirty); break;
+        case kDynAttack:  assignField (settings.dynAttackMs, juce::jlimit (0.5f, 200.0f, value), dirty); break;
+        case kDynRelease: assignField (settings.dynReleaseMs, juce::jlimit (10.0f, 2000.0f, value), dirty); break;
         default:          return;
     }
 
-    dirty = true;
 }
 
 void PumpEqAdapter::process (juce::AudioBuffer<float>& buffer) noexcept

@@ -1,4 +1,5 @@
 #include "Effects/adapters/PumpSwirlAdapter.h"
+#include "Effects/adapters/AssignHelpers.h"
 #include "Effects/adapters/PumpChoices.h"
 #include <cmath>
 #include <cstring>
@@ -77,23 +78,22 @@ void PumpSwirlAdapter::setParam (int index, float value) noexcept
 
     switch (index)
     {
-        case kMode:     settings.mode     = juce::jlimit (0, pump::swirl::kNumModes - 1, (int) std::lround (value)); break;
-        case kVariant:  settings.variant  = juce::jlimit (0, 3, (int) std::lround (value)); break;
-        case kRate:     settings.rate     = (double) value; break;
-        case kSync:     settings.sync     = value >= 0.5f; break;
-        case kDivision: settings.division = juce::jlimit (0, pump::kNumNotes - 1, (int) std::lround (value)); break;
-        case kDepth:    settings.depth    = (double) value; break;
-        case kManual:   settings.manual   = (double) value; break;
-        case kFeedback: settings.feedback = (double) value; break;
-        case kSpread:   settings.spread   = (double) value; break;
-        case kTone:     settings.tone     = (double) value; break;
-        case kWarmth:   settings.warmth   = (double) value; break;
-        case kMix:      settings.mix      = (double) value; break;
-        case kOutGain:  settings.outDb    = (double) value; break;
+        case kMode:     assignField (settings.mode, juce::jlimit (0, pump::swirl::kNumModes - 1, (int) std::lround (value)), dirty); break;
+        case kVariant:  assignField (settings.variant, juce::jlimit (0, 3, (int) std::lround (value)), dirty); break;
+        case kRate:     assignField (settings.rate, (double) value, dirty); break;
+        case kSync:     assignField (settings.sync, value >= 0.5f, dirty); break;
+        case kDivision: assignField (settings.division, juce::jlimit (0, pump::kNumNotes - 1, (int) std::lround (value)), dirty); break;
+        case kDepth:    assignField (settings.depth, (double) value, dirty); break;
+        case kManual:   assignField (settings.manual, (double) value, dirty); break;
+        case kFeedback: assignField (settings.feedback, (double) value, dirty); break;
+        case kSpread:   assignField (settings.spread, (double) value, dirty); break;
+        case kTone:     assignField (settings.tone, (double) value, dirty); break;
+        case kWarmth:   assignField (settings.warmth, (double) value, dirty); break;
+        case kMix:      assignField (settings.mix, (double) value, dirty); break;
+        case kOutGain:  assignField (settings.outDb, (double) value, dirty); break;
         default:        return;
     }
 
-    dirty = true;
 }
 
 void PumpSwirlAdapter::process (juce::AudioBuffer<float>& buffer) noexcept

@@ -41,6 +41,10 @@ public:
     int onParamIndex() const noexcept { return onIndex; }
     const std::vector<int>& paramIndices() const noexcept { return indices; }
 
+    // The deepest latency (frames) a slot's dry ring compensates at this sample rate: ceil(0.35 s), at least 8192.
+    static int maxDelayFor (double sampleRate) noexcept;
+    int getMaxDelay() const noexcept { return maxDelay; }
+
 private:
     struct AdoptSwitch {};
     Slot (const Slot& previous, AdoptSwitch);   // makeSuccessor() only
@@ -55,7 +59,10 @@ private:
     // Card 5.4: the dry copy is a delay ring, so the on/off crossfade compares dry and wet at the same point in
     // time even when the effect reports latency. 8192 frames is 170 ms at 48k — more than the deepest pedal.
     // (A ring needs a position, which is why this scaffold header gained one int; see NOTES.md, card 5.4.)
+    // Open item 3: since 6 Nov the ring is sized from the sample rate in prepare() (ceil(0.35 s), never below
+    // this floor) so a pedal that reports a long latency at 96 kHz is not clamped.
     static constexpr int kMaxDelaySamples = 8192;
+    int maxDelay = kMaxDelaySamples;          // set by prepare(); audio thread reads it, never writes
     juce::AudioBuffer<float> dryBuffer;       // sized in prepare(): one block plus the delay ring
     int dryWritePos = 0;                      // audio thread only
     juce::SmoothedValue<float> wetGain;       // 0 = bypassed, 1 = on

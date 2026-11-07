@@ -22,34 +22,70 @@ struct RouterState
     std::atomic<const MidiRouter*> owner { nullptr };
     std::atomic<uint64_t> blocksProcessed { 0 };
     std::vector<RetiredTable> retired;           // message thread only
+    RouterState* next = nullptr;                 // fixed once the node is linked into the list
 };
 
-constexpr int kMaxRouterStates = 8;
-RouterState routerStates[kMaxRouterStates];
+// Open item 8 (6 Nov review): the table used to be eight fixed slots, and a ninth router found none, so its
+// publish() deleted the old mapping table at once while the audio thread could still be reading it. Nodes now
+// form a push-only list: a router claims a free node or, on the message thread (construction), links a new one.
+// The audio thread only walks the list with acquire loads - no lock, no allocation - and a node is never unlinked
+// or freed while the process runs, so any pointer it has seen stays valid.
+struct StatePool
+{
+    std::atomic<RouterState*> head { nullptr };
+
+    ~StatePool()
+    {
+        auto* node = head.load (std::memory_order_acquire);
+
+        while (node != nullptr)
+        {
+            auto* following = node->next;
+            delete node;
+            node = following;
+        }
+    }
+};
+
+StatePool& statePool()
+{
+    static StatePool pool;
+    return pool;
+}
 
 RouterState* claimState (const MidiRouter* router)
 {
-    for (auto& state : routerStates)
+    auto& pool = statePool();
+
+    for (auto* state = pool.head.load (std::memory_order_acquire); state != nullptr; state = state->next)
     {
         const MidiRouter* unclaimed = nullptr;
 
-        if (state.owner.compare_exchange_strong (unclaimed, router, std::memory_order_acq_rel))
+        if (state->owner.compare_exchange_strong (unclaimed, router, std::memory_order_acq_rel))
         {
-            state.blocksProcessed.store (0, std::memory_order_relaxed);
-            state.retired.clear();
-            return &state;
+            state->blocksProcessed.store (0, std::memory_order_relaxed);
+            state->retired.clear();
+            return state;
         }
     }
 
-    jassertfalse;                                // more than kMaxRouterStates routers alive at once
-    return nullptr;
+    // None free: grow the list (message thread, construction time).
+    auto* fresh = new RouterState();
+    fresh->owner.store (router, std::memory_order_relaxed);
+    fresh->next = pool.head.load (std::memory_order_relaxed);
+
+    while (! pool.head.compare_exchange_weak (fresh->next, fresh, std::memory_order_acq_rel, std::memory_order_relaxed))
+    {
+    }
+
+    return fresh;
 }
 
 RouterState* stateFor (const MidiRouter* router) noexcept
 {
-    for (auto& state : routerStates)
-        if (state.owner.load (std::memory_order_acquire) == router)
-            return &state;
+    for (auto* state = statePool().head.load (std::memory_order_acquire); state != nullptr; state = state->next)
+        if (state->owner.load (std::memory_order_acquire) == router)
+            return state;
 
     return nullptr;
 }

@@ -1,4 +1,5 @@
 #include "Effects/adapters/PumpChopAdapter.h"
+#include "Effects/adapters/AssignHelpers.h"
 #include "Effects/adapters/PumpChoices.h"
 #include <cmath>
 #include <cstring>
@@ -70,17 +71,16 @@ void PumpChopAdapter::setParam (int index, float value) noexcept
 
     switch (index)
     {
-        case kSlices:   settings.slices   = juce::jlimit (0, 1, (int) std::lround (value)); break;
-        case kLengthP:  settings.length   = juce::jlimit (0, pump::chop::kNumLengths - 1, (int) std::lround (value)); break;
-        case kQuantise: settings.quant    = juce::jlimit (0, pump::chop::kNumQuant - 1, (int) std::lround (value)); break;
-        case kHold:     settings.hold     = value >= 0.5f; break;
-        case kLoopTwo:  settings.loopTwo  = value >= 0.5f; break;
-        case kMix:      settings.mix      = juce::jlimit (0.0, 100.0, (double) value) * 0.01; break;   // pump stores 0..1
-        case kOutGain:  settings.outDb    = juce::jlimit (-24.0, 24.0, (double) value); break;
+        case kSlices:   assignField (settings.slices, juce::jlimit (0, 1, (int) std::lround (value)), dirty); break;
+        case kLengthP:  assignField (settings.length, juce::jlimit (0, pump::chop::kNumLengths - 1, (int) std::lround (value)), dirty); break;
+        case kQuantise: assignField (settings.quant, juce::jlimit (0, pump::chop::kNumQuant - 1, (int) std::lround (value)), dirty); break;
+        case kHold:     assignField (settings.hold, value >= 0.5f, dirty); break;
+        case kLoopTwo:  assignField (settings.loopTwo, value >= 0.5f, dirty); break;
+        case kMix:      assignField (settings.mix, juce::jlimit (0.0, 100.0, (double) value) * 0.01, dirty); break;   // pump stores 0..1
+        case kOutGain:  assignField (settings.outDb, juce::jlimit (-24.0, 24.0, (double) value), dirty); break;
         default:        return;
     }
 
-    dirty = true;
 }
 
 void PumpChopAdapter::process (juce::AudioBuffer<float>& buffer) noexcept

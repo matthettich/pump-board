@@ -1,4 +1,5 @@
 #include "Effects/adapters/PumpHeatAdapter.h"
+#include "Effects/adapters/AssignHelpers.h"
 #include "Effects/adapters/PumpChoices.h"
 #include <cmath>
 #include <cstring>
@@ -84,15 +85,15 @@ void PumpHeatAdapter::setParam (int index, float value) noexcept
     if (! std::isfinite (value))
         return;
 
-    if (index == kOutGain)      { outDbValue = juce::jlimit (-24.0f, 24.0f, value); dirty = true; return; }
-    if (index == kMix)          { mixValue = juce::jlimit (0.0f, 100.0f, value); dirty = true; return; }
-    if (index == kOversampling) { osIndex = juce::jlimit (0, 3, (int) std::lround (value)); dirty = true; return; }
-    if (index == kAutoGain)     { autoGainOnValue = value >= 0.5f; dirty = true; return; }
-    if (index == kXoverMode)    { xoverModeValue = juce::jlimit (0, 1, (int) std::lround (value)); dirty = true; return; }
-    if (index == kBands)        { bandCountValue = juce::jlimit (1, kNumBands, (int) std::lround (value)); dirty = true; return; }
-    if (index == kXover1)       { xover[0] = juce::jlimit (20.0f, 20000.0f, value); dirty = true; return; }
-    if (index == kXover2)       { xover[1] = juce::jlimit (20.0f, 20000.0f, value); dirty = true; return; }
-    if (index == kXover3)       { xover[2] = juce::jlimit (20.0f, 20000.0f, value); dirty = true; return; }
+    if (index == kOutGain)      { assignField (outDbValue, juce::jlimit (-24.0f, 24.0f, value), dirty); return; }
+    if (index == kMix)          { assignField (mixValue, juce::jlimit (0.0f, 100.0f, value), dirty); return; }
+    if (index == kOversampling) { assignField (osIndex, juce::jlimit (0, 3, (int) std::lround (value)), dirty); return; }
+    if (index == kAutoGain)     { assignField (autoGainOnValue, value >= 0.5f, dirty); return; }
+    if (index == kXoverMode)    { assignField (xoverModeValue, juce::jlimit (0, 1, (int) std::lround (value)), dirty); return; }
+    if (index == kBands)        { assignField (bandCountValue, juce::jlimit (1, kNumBands, (int) std::lround (value)), dirty); return; }
+    if (index == kXover1)       { assignField (xover[0], juce::jlimit (20.0f, 20000.0f, value), dirty); return; }
+    if (index == kXover2)       { assignField (xover[1], juce::jlimit (20.0f, 20000.0f, value), dirty); return; }
+    if (index == kXover3)       { assignField (xover[2], juce::jlimit (20.0f, 20000.0f, value), dirty); return; }
 
     const int bandIndex = (index - kFirstBand) / kBandFields;
     const int field = (index - kFirstBand) % kBandFields;
@@ -104,17 +105,16 @@ void PumpHeatAdapter::setParam (int index, float value) noexcept
 
     switch (field)
     {
-        case 0: band.mode   = juce::jlimit (0, pump::heat::kNumTypes - 1, (int) std::lround (value)); break;
-        case 1: band.drive  = juce::jlimit (0.0f, 24.0f, value); break;
-        case 2: band.mix    = juce::jlimit (0.0f, 100.0f, value); break;
-        case 3: band.level  = juce::jlimit (-12.0f, 12.0f, value); break;
-        case 4: band.solo   = value >= 0.5f; break;
-        case 5: band.mute   = value >= 0.5f; break;
-        case 6: band.bypass = value >= 0.5f; break;
+        case 0: assignField (band.mode, juce::jlimit (0, pump::heat::kNumTypes - 1, (int) std::lround (value)), dirty); break;
+        case 1: assignField (band.drive, juce::jlimit (0.0f, 24.0f, value), dirty); break;
+        case 2: assignField (band.mix, juce::jlimit (0.0f, 100.0f, value), dirty); break;
+        case 3: assignField (band.level, juce::jlimit (-12.0f, 12.0f, value), dirty); break;
+        case 4: assignField (band.solo, value >= 0.5f, dirty); break;
+        case 5: assignField (band.mute, value >= 0.5f, dirty); break;
+        case 6: assignField (band.bypass, value >= 0.5f, dirty); break;
         default: return;
     }
 
-    dirty = true;
 }
 
 void PumpHeatAdapter::process (juce::AudioBuffer<float>& buffer) noexcept

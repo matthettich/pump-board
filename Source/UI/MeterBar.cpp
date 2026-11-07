@@ -4,6 +4,15 @@
 
 namespace pb
 {
+namespace
+{
+// Exact comparison without -Wfloat-equal: the values are copies, so any difference is a real one.
+bool differs (float a, float b) noexcept
+{
+    return a < b || b < a;
+}
+} // namespace
+
 using namespace style;
 using namespace style::draw;
 
@@ -69,10 +78,16 @@ void MeterBar::timerCallback()
     const float outNow = juce::Decibels::gainToDecibels (processor.outputPeak(), -60.0f);
 
     // the card's falling peak on the message side: ~27 dB/s at 30 Hz, with a slower hold line
+    const float before[] = { inDb, outDb, inHoldDb, outHoldDb };
+
     inDb = juce::jmax (inNow, inDb - 0.9f);
     outDb = juce::jmax (outNow, outDb - 0.9f);
     inHoldDb = juce::jmax (inNow, inHoldDb - 0.25f);
     outHoldDb = juce::jmax (outNow, outHoldDb - 0.25f);
+
+    // Open item 4: repaint only when something drawn moved. A silent board settles on -60 and then stops.
+    bool changed = differs (before[0], inDb) || differs (before[1], outDb)
+                || differs (before[2], inHoldDb) || differs (before[3], outHoldDb);
 
     // the registry is the source of truth: pull the dials back when something else moves them
     if (! inTrim.isMouseButtonDown() && inTrimIndex != ParameterRegistry::kInvalid)
@@ -81,7 +96,18 @@ void MeterBar::timerCallback()
     if (! outTrim.isMouseButtonDown() && outTrimIndex != ParameterRegistry::kInvalid)
         outTrim.setValue ((double) registry.get (outTrimIndex), juce::dontSendNotification);
 
-    repaint();
+    // the trim read-outs under the dials are painted here too
+    const float inTrimNow = (float) inTrim.getValue(), outTrimNow = (float) outTrim.getValue();
+
+    if (differs (inTrimNow, shownInTrim) || differs (outTrimNow, shownOutTrim))
+    {
+        shownInTrim = inTrimNow;
+        shownOutTrim = outTrimNow;
+        changed = true;
+    }
+
+    if (changed)
+        repaint();
 }
 
 void MeterBar::resized()

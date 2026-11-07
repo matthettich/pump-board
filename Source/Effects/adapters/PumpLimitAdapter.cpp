@@ -1,4 +1,5 @@
 #include "Effects/adapters/PumpLimitAdapter.h"
+#include "Effects/adapters/AssignHelpers.h"
 #include "Effects/adapters/PumpChoices.h"
 #include <cmath>
 #include <cstring>
@@ -57,24 +58,23 @@ void PumpLimitAdapter::setParam (int index, float value) noexcept
 
     switch (index)
     {
-        case kGain:        settings.gainDb      = juce::jlimit (0.0f, 30.0f, value); break;
-        case kCeiling:     settings.ceilingDb   = juce::jlimit (-12.0f, 0.0f, value); break;
-        case kStyle:       settings.style       = juce::jlimit (0, pump::limit::kNumStyles - 1, (int) std::lround (value)); break;
-        case kLookahead:   settings.lookaheadMs = juce::jlimit (0.1f, 10.0f, value); break;
-        case kAttack:      settings.attack      = juce::jlimit (0.0f, 100.0f, value); break;
-        case kRelease:     settings.releaseMs   = juce::jlimit (1.0f, 1000.0f, value); break;
-        case kLinkTrans:   settings.linkTrans   = juce::jlimit (0.0f, 100.0f, value); break;
-        case kLinkRel:     settings.linkRel     = juce::jlimit (0.0f, 100.0f, value); break;
-        case kTruePeak:    settings.truePeak    = value >= 0.5f; break;
-        case kOversampling: settings.oversampling = juce::jlimit (0, 3, (int) std::lround (value)); break;
-        case kDcFilter:    settings.dc          = value >= 0.5f; break;
-        case kDither:      settings.dither      = juce::jlimit (0, 2, (int) std::lround (value)); break;
-        case kShaping:     settings.shaping     = juce::jlimit (0, 1, (int) std::lround (value)); break;
-        case kUnity:       settings.unity       = value >= 0.5f; break;
+        case kGain:        assignField (settings.gainDb, juce::jlimit (0.0f, 30.0f, value), dirty); break;
+        case kCeiling:     assignField (settings.ceilingDb, juce::jlimit (-12.0f, 0.0f, value), dirty); break;
+        case kStyle:       assignField (settings.style, juce::jlimit (0, pump::limit::kNumStyles - 1, (int) std::lround (value)), dirty); break;
+        case kLookahead:   assignField (settings.lookaheadMs, juce::jlimit (0.1f, 10.0f, value), dirty); break;
+        case kAttack:      assignField (settings.attack, juce::jlimit (0.0f, 100.0f, value), dirty); break;
+        case kRelease:     assignField (settings.releaseMs, juce::jlimit (1.0f, 1000.0f, value), dirty); break;
+        case kLinkTrans:   assignField (settings.linkTrans, juce::jlimit (0.0f, 100.0f, value), dirty); break;
+        case kLinkRel:     assignField (settings.linkRel, juce::jlimit (0.0f, 100.0f, value), dirty); break;
+        case kTruePeak:    assignField (settings.truePeak, value >= 0.5f, dirty); break;
+        case kOversampling: assignField (settings.oversampling, juce::jlimit (0, 3, (int) std::lround (value)), dirty); break;
+        case kDcFilter:    assignField (settings.dc, value >= 0.5f, dirty); break;
+        case kDither:      assignField (settings.dither, juce::jlimit (0, 2, (int) std::lround (value)), dirty); break;
+        case kShaping:     assignField (settings.shaping, juce::jlimit (0, 1, (int) std::lround (value)), dirty); break;
+        case kUnity:       assignField (settings.unity, value >= 0.5f, dirty); break;
         default:           return;
     }
 
-    dirty = true;
 }
 
 void PumpLimitAdapter::process (juce::AudioBuffer<float>& buffer) noexcept

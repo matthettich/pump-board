@@ -242,28 +242,28 @@ card).
 
 Worth doing, roughly in order. Each was confirmed by reading the code, none is a crash.
 
-1. **Adapters mark `dirty` on every block.** `Slot::process` pushes every param every block and most adapters
+1. **DONE (6 Nov, open-items pass): adapters marked `dirty` on every block.** All adapters now use `assignField` (`adapters/AssignHelpers.h`); the original finding: `Slot::process` pushes every param every block and most adapters
    set `dirty = true` unconditionally (ECHO, COMP, CALM, EQ, SNAP, HEAT, BAND, SPRING…), so `setSettings` runs
    every block; EQ in linear-phase mode rebuilds its kernel periodically even when idle. `PumpTwangAdapter`
    already does it right (`assignFloat`/`assignInt`): copy that pattern. Pure CPU, but it is most of the idle load.
 2. **A pedal switched back on replays its old tail.** A settled-off slot freezes its pedal's state rather than
    clearing it. Fix with a fresh successor (`makeSuccessor`) once a slot has been off for ~50 ms, never
    `reset()` on the audio thread.
-3. **Dry rings at high sample rates.** 8192 per slot / 16384 board are fixed; CALM at 96 kHz reports 16384 and is
+3. **DONE: dry rings at high sample rates** (slot ceil(0.35 s) with an 8192 floor, board 4x that, both set in prepare). Original finding: 8192 per slot / 16384 board are fixed; CALM at 96 kHz reports 16384 and is
    clamped. Size them from the sample rate in `prepare()`.
-4. **Per-frame waste in the UI.** `GenericEffectEditor`, `MacroStrip` and `MeterBar` repaint at 30 Hz regardless,
+4. **DONE: per-frame waste in the UI** (editor/macro strip/meters repaint on change; `syncSlots(false)` skips unless the counter or the chain moved). Original finding: `GenericEffectEditor`, `MacroStrip` and `MeterBar` repaint at 30 Hz regardless,
    and `syncSlots` copies every pedal's `params()` (Strings) for 16 slots each tick. Repaint on change; rebuild
    slot lines only when `registry.changeCounter()` moved.
 5. **`MainContent` is a god object** (~1300 lines: layout, autosave, presets, swap state machine, learn flow,
    four menus, status text, tempo, overlays). Split out a `BoardSession` (autosave, presets, swap) and a
    `SlotMenus` helper before adding more to it. `BoardPrototype`'s painted slots/editor duplicate the real
    components and should go once the `--render` paths use real ones.
-6. **Dense pedals draw tiny dials** (ECHO, TUBE: 12+ params in one row shrink every knob). A second row or a
+6. **DONE (layout picks 1-3 balanced rows for the biggest knob; TUBE is one row, ECHO two): dense pedals drew tiny dials** (ECHO, TUBE: 12+ params in one row shrink every knob). A second row or a
    minimum dial size.
-7. **`PresetManager` edges:** a name of only illegal characters becomes `.board` (hidden, so missing from the
+7. **DONE: `PresetManager` edges** (default name "Untitled", case-only rename via a temp name, rename rolls back when the Bin refuses). Original finding: a name of only illegal characters becomes `.board` (hidden, so missing from the
    program-change list); a case-only rename on macOS reports success without renaming; `rename` ignores
    `moveToTrash`'s result.
-8. **`MidiRouter`'s side table holds 8 routers**; a 9th `publish` deletes the old table immediately (tests only,
+8. **DONE: `MidiRouter`'s side table held 8 routers** (now a push-only list of nodes, any number). Original finding:; a 9th `publish` deletes the old table immediately (tests only,
    but a use-after-free if it ever happens with audio running).
 9. **JUCE licence.** JUCE is AGPLv3 or commercial. Fine for personal use; if pump BOARD is ever sold or shipped
    closed-source, a commercial JUCE licence is needed.
@@ -342,8 +342,9 @@ judged on the Mac build.
 - **A switched-off pedal keeps its latency** (6 Nov): once its fade settles, a slot outputs its dry ring
   `latency` frames late instead of the undelayed input, so on/off never jumps the timing and the board's latency
   total is the same whatever is on.
-- **The dry rings are fixed size.** 8192 frames per slot and 16384 for the board, clamped silently beyond that.
-  A chain deeper than 340 ms would be compensated only up to the cap.
+- **The dry rings are sized from the sample rate** (6 Nov): a slot's is ceil(0.35 s) frames (never below 8192), the
+  board's four times that, both allocated in prepare and clamped silently beyond it (`Slot::maxDelayFor`,
+  `BoardProcessor::maxDryDelayFor`).
 - **The latency probe's click bypasses the chain.** It is added to the device's output buffer by a second
   `AudioIODeviceCallback`, after the player's block, so it misses the input trim, the slots and the limiter.
   That is what makes it a clean probe; never reuse that callback for anything that should be processed.
