@@ -18,6 +18,12 @@ decision and deviation — read it before changing anything, it is where the tra
 
 ## Build, test, run
 
+JUCE and pump are **submodules**: clone with `git clone --recurse-submodules` (or run
+`git submodule update --init --recursive` in an existing checkout). They are pinned to JUCE 9.0.5
+(`d60b7a7`) and pump `7d981aa` — the exact commits this app is built and tested against. Configure with
+`-DCMAKE_BUILD_TYPE=Debug`: that enables `PB_ALLOCATION_GUARD`, which is where the 20 expectations in
+`AllocationGuardTests` come from, so a plain configure runs 2580 and is otherwise clean.
+
 ```bash
 cd pump-board
 export SDKROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX26.5.sdk   # required on this machine

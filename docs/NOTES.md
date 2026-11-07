@@ -591,3 +591,22 @@ Asked for by the owner together, to test by hand.
 - Verified: build clean, 0 warnings, **2600 expectations pass**, 0 failed, null tests still bit-identical.
 - Not verified: how a model change sounds in the room. The numbers say the new springs ring; nobody has heard the
   re-pluck, and whether it feels like a spring swap or a stumble is a judgement for the owner's ears.
+
+## 2026-11-07 — card 5.35 (dependencies pinned; first push to GitHub)
+- The repo (`https://github.com/matthettich/pump-board`) is the app only: `Source`, `Tests`, `docs`, `schemas`,
+  181 files, ~1 MB. `build/` (1.2 GB) and `external/` (151 MB) stay ignored — a repo with build artefacts in it
+  is a repo nobody can diff.
+- JUCE and pump are now **submodules** at the commits this build actually uses: JUCE 9.0.5 (`d60b7a7`, shallow
+  clone of master) and pump `7d981aa` (the owner's fork, `main`). `.gitmodules` records both URLs; the gitlinks
+  record the SHAs. `git clone --recurse-submodules` now yields a tree that configures and builds.
+- Verified by doing it: a fresh recursive clone into `build/clone-test` came back with both SHAs exact
+  (`d60b7a7`, `7d981aa`), configured, built, and passed 2580 expectations with 0 failures. That
+  clone is also what caught the next item.
+- The fresh clone exposed a warning our Debug-only development never showed: without `PB_ALLOCATION_GUARD`,
+  `pb::alloc::Scope` is an empty struct, so the guard object in `BoardProcessor::processBlock` was an unused
+  local and `-Wunused-variable` fired. Marked `[[maybe_unused]]` (both build types keep the RAII intent), and
+  the clone now rebuilds with 0 warnings in our code. The 20-expectation gap between 2600 (Debug) and
+  2580 (plain configure) is `AllocationGuardTests` being `#ifdef PB_ALLOCATION_GUARD` — expected,
+  now written into `HANDOVER.md` next to the build commands.
+- Not verified: a clone on another machine. Everything above ran locally against the public remote; the
+  submodule URLs are public, but nobody has cloned it from a clean Mac.
