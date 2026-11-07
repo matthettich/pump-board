@@ -755,3 +755,6 @@ not for merging. Every finding was checked against the code before changing anyt
   stereo input collapses to mono. Harmless on a guitar board (the input is mono and the board folds it to both
   sides), but it belongs in pump: noted in HANDOVER.
 - Verified: 3216 expectations (Debug), 3148 (Release) on Linux.
+- GRUMBLE's mono dry path fixed **in pump** (matthettich/pump 419fbcf: a latency-aligned dry line per channel; the
+  mono sum still drives the creature) and the submodule bumped to it. pump's own mix-0 test now uses a different,
+  opposite-phase right channel and fails on the old engine. pump BOARD: 3216 expectations pass.

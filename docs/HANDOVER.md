@@ -277,12 +277,9 @@ last `NOTES.md` entries. Left:
    (`Common/Sanitize.h`), and a NaN a pedal makes is stopped at its own output, but that pedal's state stays
    poisoned. A watchdog could notice repeated scrubs from one slot and rebuild its pedal from the message thread
    via `Slot::makeSuccessor`, carrying its param values over (and keeping its mappings valid).
-6. **For the pump repo, not here:** GRUMBLE's engine keeps the mono sum as its dry signal, so its MIX collapses a
-   stereo input to mono (CodeRabbit, PR #1). Fine for a guitar board; fix in pump if GRUMBLE is used on stereo
-   sources, then bump the submodule.
-7. **Not on the board, on purpose:** METER and MASTER (owner's call), ROOM (system correction, not a pedal), the
+6. **Not on the board, on purpose:** METER and MASTER (owner's call), ROOM (system correction, not a pedal), the
    synths (no MIDI into slots), MACHINE (GPL, house rule).
-8. **JUCE licence.** JUCE is AGPLv3 or commercial. Fine for personal use; if pump BOARD is ever sold or shipped
+7. **JUCE licence.** JUCE is AGPLv3 or commercial. Fine for personal use; if pump BOARD is ever sold or shipped
    closed-source, a commercial JUCE licence is needed.
 
 ## Building on Linux (cloud agents)
