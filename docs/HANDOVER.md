@@ -11,7 +11,7 @@ decision and deviation — read it before changing anything, it is where the tra
   mappings, and the app can be played: sixteen slots, eight macros, MIDI and key mappings, presets with
   program changes, and a measured round trip in Settings. What is left is hand-testing
   (`REVIEW_TEMPLATE.md`) and phases 5–7 (more pedals, custom pedals, the full skin).
-- **Tests:** 2628 expectations in Debug (2608 plain), 0 failing. Last run: 6 Nov 2026 on **Linux** in a cloud
+- **Tests:** 3204 expectations in Debug, 0 failing. Last run: 6 Nov 2026 on **Linux** in a cloud
   session (see "Building on Linux" below) — not yet re-run on the Neo.
 - **Latest pass (6 Nov 2026):** a senior-style review fixed a use-after-free on pedal swap/remove/device change,
   stale mappings after a pedal goes, empty slots vanishing on load, a click when a latency pedal is switched off,
@@ -27,7 +27,7 @@ JUCE and pump are **submodules**: clone with `git clone --recurse-submodules` (o
 `git submodule update --init --recursive` in an existing checkout). They are pinned to JUCE 9.0.5
 (`d60b7a7`) and pump `7d981aa` — the exact commits this app is built and tested against. Configure with
 `-DCMAKE_BUILD_TYPE=Debug`: that enables `PB_ALLOCATION_GUARD`, which is where the 20 expectations in
-`AllocationGuardTests` come from, so a plain configure runs 2608 and is otherwise clean.
+`AllocationGuardTests` come from, so a plain configure runs fewer and is otherwise clean.
 
 ```bash
 cd pump-board
@@ -37,7 +37,7 @@ cmake --build build
 ```
 
 ```bash
-./build/PumpBoardTests_artefacts/Debug/PumpBoardTests          # 2628 expectations
+./build/PumpBoardTests_artefacts/Debug/PumpBoardTests          # 3204 expectations
 open "build/PumpBoard_artefacts/Debug/pump BOARD.app"          # or double-click it in Finder
 ```
 
@@ -62,7 +62,8 @@ target does not link the UI sources.
 
 - **Audio:** device open with fallback, saved setup, mono input folded up, input trim → 16 slots in series →
   output trim → board bypass (10 ms equal-power) → safety limiter (−0.3 dBFS, stereo-linked, instant attack).
-- **Pedals:** twenty-one — `pump.spring`, `pump.echo`, `pump.tube`, `pump.crush`, `pump.swirl`, `pump.comp`,
+- **Pedals:** twenty-four — `pump.tune`, `pump.vox`, `pump.grumble` (a "voice" category, 6 Nov 2026; null-tested
+  like the rest), plus `pump.spring`, `pump.echo`, `pump.tube`, `pump.crush`, `pump.swirl`, `pump.comp`,
   `pump.heat`, `pump.tone`, `pump.verb`, `pump.limit`, `pump.snap`, `pump.strip`, `pump.calm`, `pump.gate`,
   `pump.grain`, `pump.stutter`, `pump.chop`, `pump.wide`, `pump.band`, `pump.eq`, `pump.twang` as `IEffect` adapters;
   METER and MASTER are deliberately absent, see NOTES' phase-5 closing entry. The five tempo-locked ones
@@ -238,34 +239,27 @@ card).
 
 ---
 
-## Open from the 6 Nov review (found, checked, not fixed)
+## Still open (after the 6 Nov review and open-items pass)
 
-Worth doing, roughly in order. Each was confirmed by reading the code, none is a crash.
+Closed on 6 Nov: change-only `dirty` in every adapter (`AssignHelpers.h`), sample-rate-sized dry rings, UI repaint on
+change, paged editor for dense pedals, `PresetManager` name/rename edges, `MidiRouter` router limit. Details in the
+last `NOTES.md` entries. Left:
 
-1. **DONE (6 Nov, open-items pass): adapters marked `dirty` on every block.** All adapters now use `assignField` (`adapters/AssignHelpers.h`); the original finding: `Slot::process` pushes every param every block and most adapters
-   set `dirty = true` unconditionally (ECHO, COMP, CALM, EQ, SNAP, HEAT, BAND, SPRING…), so `setSettings` runs
-   every block; EQ in linear-phase mode rebuilds its kernel periodically even when idle. `PumpTwangAdapter`
-   already does it right (`assignFloat`/`assignInt`): copy that pattern. Pure CPU, but it is most of the idle load.
-2. **A pedal switched back on replays its old tail.** A settled-off slot freezes its pedal's state rather than
-   clearing it. Fix with a fresh successor (`makeSuccessor`) once a slot has been off for ~50 ms, never
-   `reset()` on the audio thread.
-3. **DONE: dry rings at high sample rates** (slot ceil(0.35 s) with an 8192 floor, board 4x that, both set in prepare). Original finding: 8192 per slot / 16384 board are fixed; CALM at 96 kHz reports 16384 and is
-   clamped. Size them from the sample rate in `prepare()`.
-4. **DONE: per-frame waste in the UI** (editor/macro strip/meters repaint on change; `syncSlots(false)` skips unless the counter or the chain moved). Original finding: `GenericEffectEditor`, `MacroStrip` and `MeterBar` repaint at 30 Hz regardless,
-   and `syncSlots` copies every pedal's `params()` (Strings) for 16 slots each tick. Repaint on change; rebuild
-   slot lines only when `registry.changeCounter()` moved.
-5. **`MainContent` is a god object** (~1300 lines: layout, autosave, presets, swap state machine, learn flow,
-   four menus, status text, tempo, overlays). Split out a `BoardSession` (autosave, presets, swap) and a
-   `SlotMenus` helper before adding more to it. `BoardPrototype`'s painted slots/editor duplicate the real
-   components and should go once the `--render` paths use real ones.
-6. **DONE (layout picks 1-3 balanced rows for the biggest knob; TUBE is one row, ECHO two): dense pedals drew tiny dials** (ECHO, TUBE: 12+ params in one row shrink every knob). A second row or a
-   minimum dial size.
-7. **DONE: `PresetManager` edges** (default name "Untitled", case-only rename via a temp name, rename rolls back when the Bin refuses). Original finding: a name of only illegal characters becomes `.board` (hidden, so missing from the
-   program-change list); a case-only rename on macOS reports success without renaming; `rename` ignores
-   `moveToTrash`'s result.
-8. **DONE: `MidiRouter`'s side table held 8 routers** (now a push-only list of nodes, any number). Original finding:; a 9th `publish` deletes the old table immediately (tests only,
-   but a use-after-free if it ever happens with audio running).
-9. **JUCE licence.** JUCE is AGPLv3 or commercial. Fine for personal use; if pump BOARD is ever sold or shipped
+1. **A pedal switched back on replays its old tail.** A settled-off slot freezes its pedal's state rather than
+   clearing it. Fix with a fresh successor (`makeSuccessor`) once a slot has been off for ~50 ms, never `reset()`
+   on the audio thread.
+2. **`MainContent` is a god object** (~1300 lines: layout, autosave, presets, swap state machine, learn flow, four
+   menus, status text, tempo, overlays). Split out a `BoardSession` (autosave, presets, swap) and a `SlotMenus`
+   helper before adding more to it. `BoardPrototype`'s painted slots/editor duplicate the real components.
+3. **pump AMP is not on the board yet** — the most guitar-relevant pump effect, and a decision for the owner. It
+   needs (a) the NAM core and its dependencies from pump's `third_party/` (a nested submodule, not fetched here),
+   (b) a way to choose a `.nam` model and a cabinet IR file per slot, and (c) somewhere to save those paths — the
+   board JSON schema is the contract, so a schema change (`version: 2`, a per-slot `files` object) needs a yes first.
+4. **Pages in the editor are 20 controls max**, two rows of ~32 px dials on dense pages (VOX has 3 pages, GRUMBLE,
+   ECHO and TUNE 2). Clicking the page keys has only been rendered, not clicked in a live window.
+5. **Not on the board, on purpose:** METER and MASTER (owner's call), ROOM (system correction, not a pedal), the
+   synths (no MIDI into slots), MACHINE (GPL, house rule).
+6. **JUCE licence.** JUCE is AGPLv3 or commercial. Fine for personal use; if pump BOARD is ever sold or shipped
    closed-source, a commercial JUCE licence is needed.
 
 ## Building on Linux (cloud agents)

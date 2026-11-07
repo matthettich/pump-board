@@ -102,6 +102,9 @@ public:
             pb::GenericEffectEditor editor (previewRegistry);
             editor.setSlot (&slot);
 
+            if (args.size() >= 5)
+                editor.setPage (args[4].getIntValue() - 1);     // optional 1-based page to render
+
             const auto area = board.editorBounds();
             editor.setBounds ((int) area.getX(), (int) area.getY(), (int) area.getWidth(), (int) area.getHeight());
             board.addAndMakeVisible (editor);

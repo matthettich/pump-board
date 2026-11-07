@@ -1,6 +1,6 @@
 # pump BOARD
 
-A Mac-only JUCE standalone guitar pedalboard: **16 slots in series**, **21 pedals** built from
+A Mac-only JUCE standalone guitar pedalboard: **16 slots in series**, **24 pedals** built from
 [pump](https://github.com/matthettich/pump)'s DSP engines, **8 macro knobs**, MIDI and computer-key mapping,
 presets with program changes, and a device-wide tempo you can type, drag, or drive with a MIDI clock.
 
@@ -11,9 +11,9 @@ sounds. `docs/HANDOVER.md` keeps that list honest.
 ## Pedals
 
 SPRING, ECHO, TUBE, CRUSH, SWIRL, COMP, HEAT, TONE, VERB, LIMIT, SNAP, STRIP, CALM, GATE, GRAIN, STUTTER, CHOP,
-WIDE, BAND, EQ, TWANG.
+WIDE, BAND, EQ, TWANG, TUNE, VOX, GRUMBLE.
 
-All twenty-one are pump's DSP compiled in as source, unmodified. The adapter for each one only translates
+All twenty-four are pump's DSP compiled in as source, unmodified. The adapter for each one only translates
 parameters and buffers; `external/pump` is never edited (a house rule, and the reason TWANG drives COIL's
 engine rather than having one of its own).
 
@@ -51,11 +51,11 @@ open "build/PumpBoard_artefacts/Debug/pump BOARD.app"
 ## Tests
 
 ```bash
-./build/PumpBoardTests_artefacts/Debug/PumpBoardTests     # 2628 expectations, 0 failing
+./build/PumpBoardTests_artefacts/Debug/PumpBoardTests     # 3204 expectations, 0 failing
 ```
 
 The suite covers the engine, the router, macros, presets, every adapter's null test against pump's engine, and
-the allocation guard. A plain configure (no `-DCMAKE_BUILD_TYPE=Debug`) runs **2608**: `AllocationGuardTests`
+the allocation guard. A plain configure (no `-DCMAKE_BUILD_TYPE=Debug`) runs fewer: `AllocationGuardTests` and the new pedals' allocation checks
 are `#ifdef PB_ALLOCATION_GUARD`, so their 20 expectations only exist in Debug. Both configurations should
 build with **zero warnings** in `Source/` and `Tests/`; pump's and JUCE's headers warn and are left alone.
 

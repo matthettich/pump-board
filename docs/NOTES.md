@@ -702,3 +702,13 @@ Scaffold headers touched: `Slot.h` (makeSuccessor, ownsRegistrations, preparedBl
   so any number of routers get a retire list; the audio thread only walks it with acquire loads. A use-after-free is not
   observable from a test, so `Tests/OpenItemsTests.cpp` pins the behaviour with twenty live routers.
 - Tests: new `Tests/OpenItemsTests.cpp`.
+
+## 2026-11-06 — new pedals and the paged editor (verified by Claude)
+- pump TUNE, VOX and GRUMBLE added as adapters (category "voice"), pump pinned to `c0da8c7` for GRUMBLE (upstream
+  only added that plugin since `7d981aa`). Null tests bit-identical at 64/128/511. AMP deliberately not added: see
+  HANDOVER "Still open" item 3.
+- The editor pages dense pedals (≤20 controls a page, page keys top right, groups from the param id prefix; a group
+  labels a page only when it has 3+ controls there). `--render-editor out.png 1.0 pump.vox 2` renders page 2.
+- Category colours compare case-insensitively: SWIRL's "modulation" was falling through to pink.
+- Verified: 3204 expectations pass on Linux; renders of VOX (3 pages), GRUMBLE, TUNE, ECHO, TUBE looked at.
+- Not verified: anything on the Mac, page keys clicked live, how the three voice pedals sound on a guitar.
