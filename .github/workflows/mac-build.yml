@@ -1,0 +1,57 @@
+# Builds pump BOARD for Apple silicon on every push to main and publishes the app as the "latest" release,
+# so there is always a build to download and try. Unsigned: first launch needs right-click > Open (see README).
+name: Mac build
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: mac-build
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true          # JUCE and pump only; pump's own nested submodules are not needed
+          fetch-depth: 1
+
+      - name: Tools
+        run: brew install ninja || true
+
+      - name: Configure (Release)
+        run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build app and tests
+        run: cmake --build build --target PumpBoard PumpBoardTests
+
+      - name: Run tests
+        run: ./build/PumpBoardTests_artefacts/Release/PumpBoardTests | tail -5
+
+      - name: Package
+        run: |
+          cd "build/PumpBoard_artefacts/Release"
+          ditto -c -k --sequesterRsrc --keepParent "pump BOARD.app" "$GITHUB_WORKSPACE/pump-BOARD-mac-arm64.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pump-BOARD-mac-arm64
+          path: pump-BOARD-mac-arm64.zip
+
+      - name: Publish as the "latest" release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete latest --yes --cleanup-tag || true
+          gh release create latest pump-BOARD-mac-arm64.zip \
+            --title "Latest build ($(date -u +%Y-%m-%d) ${GITHUB_SHA::7})" \
+            --notes "Built from ${GITHUB_SHA} on Apple silicon (Release). Unsigned: right-click > Open the first time." \
+            --target "$GITHUB_SHA"

@@ -42,6 +42,13 @@ and `-DCMAKE_OSX_SYSROOT` on a machine where the default works.
 Debug is worth keeping: `PB_ALLOCATION_GUARD` is a Debug-only feature, and it is the proof that the audio
 callback never allocates, locks, or does I/O.
 
+## Download a build
+
+Every push to `main` builds the app on GitHub's Apple-silicon Macs and publishes it as the **latest** release:
+<https://github.com/matthettich/pump-board/releases/tag/latest> (`pump-BOARD-mac-arm64.zip`). Unzip it and drag
+`pump BOARD.app` anywhere. It is not signed, so the first launch needs **right-click → Open → Open** (or
+`xattr -dr com.apple.quarantine "pump BOARD.app"`). The workflow is `.github/workflows/mac-build.yml`.
+
 ## Run
 
 ```bash
