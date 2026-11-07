@@ -41,7 +41,9 @@ public:
 
 private:
     std::array<Entry, kMaxParams> entries;            // written on message thread only
-    std::array<float, kMaxParams> minCache {}, maxCache {}; // read on audio thread; written before the param is used
+    // Read on the audio thread, rewritten when a freed index is reused: atomics (relaxed) so a reuse racing a late
+    // write through a stale index is a stale clamp, not a torn read (review, Nov 2026).
+    std::array<std::atomic<float>, kMaxParams> minCache {}, maxCache {};
     std::array<std::atomic<float>, kMaxParams> values {};
     std::atomic<uint32_t> counter { 0 };
 };

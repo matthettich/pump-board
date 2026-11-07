@@ -24,10 +24,14 @@ public:
     // Frees retired snapshots the audio thread can no longer be using.
     // Call from a ~30 Hz timer on the message thread.
     void collectGarbage();
+    // Publishes an empty chain, then waits (at most timeoutMs) until the audio thread has finished two more
+    // blocks, so no slot of the old chain can still be running. Returns at once when no device is running.
+    // For the rare edits that must touch a slot in place (re-preparing after a device change); see BoardModel.
+    bool detachChain (int timeoutMs = 500);
 
     // ---- juce::AudioProcessor ----
     void prepareToPlay (double sampleRate, int maximumExpectedSamplesPerBlock) override;
-    void releaseResources() override {}
+    void releaseResources() override { deviceRunning.store (false, std::memory_order_release); }
     // AUDIO THREAD:
     //   1. blocksProcessed++ (after reading the snapshot pointer)
     //   2. midiRouter.handle (midi)
@@ -73,6 +77,9 @@ private:
     int outputTrimIndex = ParameterRegistry::kInvalid;
     int tempoIndex = ParameterRegistry::kInvalid;     // "board/tempo", in BPM
     double lastTempo = -1.0;                          // audio thread only; -1 forces the first push
+    std::atomic<uint32_t> publishCount { 0 };         // bumped by publish(); a new chain gets the tempo again
+    uint32_t lastTempoPublish = 0;                    // audio thread only
+    std::atomic<bool> deviceRunning { false };        // between prepareToPlay and releaseResources
 
     // Card 5.4: the dry copy for the board bypass is a delay ring, read `chainLatency` frames later, so bypassing
     // a board with latency-reporting pedals on it stitches two copies of the same moment together. (A ring needs a

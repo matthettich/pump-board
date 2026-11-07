@@ -84,8 +84,9 @@ bool observe (const juce::MidiBuffer& midi, int numSamples, ParameterRegistry& r
             const juce::int64 interval = pos - state.lastClockPos;
 
             // Two seconds between clocks is not a slow tempo, it is a clock that stopped: start the beat again
-            // rather than average a pause into it.
-            if (interval <= 0 || interval > (juce::int64) (2.0 * state.sampleRate))
+            // rather than average a pause into it. Two clocks on the same sample (a coalesced USB burst) are still two
+            // ticks of the beat, not a restart: only time running backwards restarts it.
+            if (interval < 0 || interval > (juce::int64) (2.0 * state.sampleRate))
             {
                 state.beatStartPos = pos;
                 state.clocksThisBeat = 0;

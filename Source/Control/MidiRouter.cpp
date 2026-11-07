@@ -183,9 +183,7 @@ void MidiRouter::handle (const juce::MidiBuffer& midi) noexcept
     if (auto* state = stateFor (this))
         state->blocksProcessed.fetch_add (1, std::memory_order_relaxed);
 
-    const bool learningNow = learning.load (std::memory_order_relaxed);
-
-    if (! learningNow && active.load (std::memory_order_acquire) == nullptr)
+    if (! learning.load (std::memory_order_relaxed) && active.load (std::memory_order_acquire) == nullptr)
         return;                                  // nothing mapped and nothing to learn: the common case, free
 
     for (const auto metadata : midi)
@@ -228,7 +226,9 @@ void MidiRouter::handle (const juce::MidiBuffer& midi) noexcept
         // A note-off can never be a mapping's source, so learn keeps waiting through one.
         const bool capturable = src.type != SourceType::Note || isOn;
 
-        if (learningNow || learning.load (std::memory_order_relaxed))
+        // Re-read every message: the first capture clears `learning`, and everything after it in the same block
+        // must act normally rather than be captured too (a cached copy swallowed the rest of the block).
+        if (learning.load (std::memory_order_relaxed))
         {
             if (! capturable)
                 continue;                        // keep waiting, and act on nothing while learning

@@ -168,6 +168,13 @@ void LearnController::clearAll()
 
 void LearnController::setMappings (std::vector<Mapping> newList)
 {
+    // A new list means a new board: an armed learn or an unanswered capture points at a param index that may now
+    // belong to a different pedal, so both are dropped rather than committed against the wrong target.
+    if (learning)
+        cancelLearn();
+
+    discardPending();
+
     list = std::move (newList);
     publishTable();
     notify();

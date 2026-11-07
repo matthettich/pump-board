@@ -60,17 +60,20 @@ void LatencyProbe::process (const float* const* input, int numInputChannels,
     // Then record input 1 for the window, however many blocks that takes.
     const int written = recorded.load (std::memory_order_relaxed);
 
-    if (written >= record.getNumSamples() || input == nullptr || numInputChannels < 1
-        || input[0] == nullptr)
+    if (written >= record.getNumSamples())
     {
-        if (written >= record.getNumSamples())
-            finished.store (true, std::memory_order_release);
-
+        finished.store (true, std::memory_order_release);
         return;
     }
 
+    // No input (the device opened with none) records silence, so the window still runs out and the probe reports
+    // "nothing came back" instead of waiting forever (review, Nov 2026).
     const int toCopy = juce::jmin (numSamples, record.getNumSamples() - written);
-    record.copyFrom (0, written, input[0], toCopy);
+
+    if (input == nullptr || numInputChannels < 1 || input[0] == nullptr)
+        record.clear (0, written, toCopy);
+    else
+        record.copyFrom (0, written, input[0], toCopy);
 
     const int total = written + toCopy;
     recorded.store (total, std::memory_order_release);

@@ -31,8 +31,8 @@ int ParameterRegistry::add (const Entry& entry)
         // Written before the index is handed out; from then on read-only, so the audio thread may read them raw.
         const float lo = juce::jmin (entry.minValue, entry.maxValue);
         const float hi = juce::jmax (entry.minValue, entry.maxValue);
-        minCache[(size_t) i] = lo;
-        maxCache[(size_t) i] = hi;
+        minCache[(size_t) i].store (lo, std::memory_order_relaxed);
+        maxCache[(size_t) i].store (hi, std::memory_order_relaxed);
 
         values[(size_t) i].store (juce::jlimit (lo, hi, entry.defaultValue), std::memory_order_relaxed);
         return i;
@@ -79,7 +79,8 @@ void ParameterRegistry::set (int index, float value) noexcept
     if (index < 0 || index >= kMaxParams || ! std::isfinite (value))
         return;
 
-    values[(size_t) index].store (juce::jlimit (minCache[(size_t) index], maxCache[(size_t) index], value),
+    values[(size_t) index].store (juce::jlimit (minCache[(size_t) index].load (std::memory_order_relaxed),
+                                                     maxCache[(size_t) index].load (std::memory_order_relaxed), value),
                                   std::memory_order_relaxed);
     counter.fetch_add (1, std::memory_order_relaxed);
 }
@@ -89,8 +90,8 @@ void ParameterRegistry::setNormalised (int index, float value01) noexcept
     if (index < 0 || index >= kMaxParams || ! std::isfinite (value01))
         return;
 
-    const float lo = minCache[(size_t) index];
-    const float hi = maxCache[(size_t) index];
+    const float lo = minCache[(size_t) index].load (std::memory_order_relaxed);
+    const float hi = maxCache[(size_t) index].load (std::memory_order_relaxed);
     set (index, lo + juce::jlimit (0.0f, 1.0f, value01) * (hi - lo));
 }
 
@@ -99,8 +100,8 @@ float ParameterRegistry::getNormalised (int index) const noexcept
     if (index < 0 || index >= kMaxParams)
         return 0.0f;
 
-    const float lo = minCache[(size_t) index];
-    const float hi = maxCache[(size_t) index];
+    const float lo = minCache[(size_t) index].load (std::memory_order_relaxed);
+    const float hi = maxCache[(size_t) index].load (std::memory_order_relaxed);
 
     if (hi <= lo)
         return 0.0f;
@@ -113,8 +114,8 @@ void ParameterRegistry::toggle (int index) noexcept
     if (index < 0 || index >= kMaxParams)
         return;
 
-    const float lo = minCache[(size_t) index];
-    const float hi = maxCache[(size_t) index];
+    const float lo = minCache[(size_t) index].load (std::memory_order_relaxed);
+    const float hi = maxCache[(size_t) index].load (std::memory_order_relaxed);
     set (index, get (index) >= (lo + hi) * 0.5f ? lo : hi);
 }
 } // namespace pb

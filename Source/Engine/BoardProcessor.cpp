@@ -80,9 +80,33 @@ void BoardProcessor::publish (std::unique_ptr<ChainSnapshot> next)
 {
     auto* incoming = next.release();
     auto* previous = active.exchange (incoming, std::memory_order_acq_rel);
+    publishCount.fetch_add (1, std::memory_order_release);
 
     if (previous != nullptr)
         retireList.push_back ({ previous, blocksProcessed.load (std::memory_order_acquire) });
+}
+
+bool BoardProcessor::detachChain (int timeoutMs)
+{
+    publish (std::make_unique<ChainSnapshot>());
+
+    if (! deviceRunning.load (std::memory_order_acquire))
+        return true;
+
+    // The same two-block rule as collectGarbage: once the counter has moved twice, the block that might have been
+    // running the old chain when it was swapped out has finished.
+    const auto start = blocksProcessed.load (std::memory_order_acquire);
+    const auto deadline = juce::Time::getMillisecondCounter() + (juce::uint32) juce::jmax (1, timeoutMs);
+
+    while (blocksProcessed.load (std::memory_order_acquire) < start + 2)
+    {
+        if (juce::Time::getMillisecondCounter() >= deadline)
+            return false;
+
+        juce::Thread::sleep (1);
+    }
+
+    return true;
 }
 
 void BoardProcessor::collectGarbage()
@@ -109,8 +133,6 @@ void BoardProcessor::prepareToPlay (double newSampleRate, int maximumExpectedSam
     sampleRateHz = newSampleRate > 0.0 ? newSampleRate : 48000.0;
     maxBlock = juce::jmax (16, maximumExpectedSamplesPerBlock);
 
-    dryBuffer.setSize (2, maxBlock, false, true, false);
-
     inGain.reset (sampleRateHz, kTrimRampSeconds);
     outGain.reset (sampleRateHz, kTrimRampSeconds);
     boardWet.reset (sampleRateHz, kBypassRampSeconds);
@@ -123,7 +145,7 @@ void BoardProcessor::prepareToPlay (double newSampleRate, int maximumExpectedSam
     // Card 5.4: the dry path is a delay ring, one block plus the deepest latency a board can hold (16384 frames is
     // 340 ms at 48k — COMP's 20 ms of lookahead at 4x oversampling and CALM's 8192-point FFT both fit).
     constexpr int kMaxDryDelay = 16384;
-    dryBuffer.setSize (2, juce::jmax (1, maximumExpectedSamplesPerBlock) + kMaxDryDelay, false, true, false);
+    dryBuffer.setSize (2, maxBlock + kMaxDryDelay, false, true, false);
     dryBuffer.clear();
     dryWritePos = 0;
 
@@ -131,6 +153,8 @@ void BoardProcessor::prepareToPlay (double newSampleRate, int maximumExpectedSam
 
     inPeak.store (0.0f, std::memory_order_relaxed);
     outPeak.store (0.0f, std::memory_order_relaxed);
+
+    deviceRunning.store (true, std::memory_order_release);
 }
 
 void BoardProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
@@ -141,7 +165,9 @@ void BoardProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiB
     [[maybe_unused]] const pb::alloc::Scope allocationScope;   // empty without PB_ALLOCATION_GUARD
 
     const ChainSnapshot* snapshot = active.load (std::memory_order_acquire);
-    blocksProcessed.fetch_add (1, std::memory_order_relaxed);
+    // Release, not relaxed: the message thread's acquire load of this counter is what proves the previous block's
+    // reads of an old snapshot are finished (on Apple silicon a relaxed increment does not order them).
+    blocksProcessed.fetch_add (1, std::memory_order_acq_rel);
 
     midiRouter.handle (midi);
 
@@ -157,6 +183,15 @@ void BoardProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiB
 
         // A change test, not an equality test: a tempo that moved by less than a hundredth of a BPM is not a
         // change, and saying so with a difference keeps the audio thread honest about float comparison.
+        // A new chain (a pedal inserted, swapped or a board loaded) gets the tempo too: a tempo-aware pedal starts
+        // at its own 120 BPM and would otherwise stay there until the tempo next moved.
+        // (A counter rather than the pointer: a new snapshot can be allocated where a freed one used to be.)
+        if (const auto published = publishCount.load (std::memory_order_acquire); published != lastTempoPublish)
+        {
+            lastTempoPublish = published;
+            lastTempo = -1.0;
+        }
+
         const double delta = bpm - lastTempo;
 
         if (delta > 0.001 || delta < -0.001)
@@ -213,7 +248,7 @@ void BoardProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiB
         for (int i = 0; i < snapshot->count; ++i)
             if (auto* slot = snapshot->order[(size_t) i])
                 if (auto* fx = slot->getEffect())
-                    chainLatency += fx->latencySamples();
+                    chainLatency += fx->latencySamples();   // an off slot keeps its latency (see Slot::process)
 
     chainLatency = juce::jlimit (0, kMaxDryDelay, chainLatency);
 
