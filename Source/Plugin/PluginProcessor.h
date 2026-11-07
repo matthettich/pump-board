@@ -22,7 +22,9 @@ public:
 
     bool acceptsMidi() const override { return true; }
     bool producesMidi() const override { return false; }
-    double getTailLengthSeconds() const override { return 0.0; }
+    // Card 8.6: SPRING's decay reaches 8 s (T60) and every other tail is shorter. A host uses this to decide how long
+    // to keep rendering after a stop, so zero would cut a reverb off mid-flight.
+    double getTailLengthSeconds() const override { return 8.0; }
 
     juce::AudioProcessorEditor* createEditor() override { return nullptr; }   // card 8.5
     bool hasEditor() const override { return false; }
@@ -42,6 +44,8 @@ public:
 private:
     void timerCallback() override;
     void beginStateRestore (const juce::var& state);
+    bool updateHostTempo();
+    int chainLatencySamples();
 
     PluginSession session;
 
@@ -49,5 +53,8 @@ private:
     juce::var pendingState;
     juce::int64 pendingStateDueMs = 0;
     bool pendingStateUnbypass = false;
+
+    int tempoIndex = ParameterRegistry::kInvalid;
+    int reportedLatency = 0;
 };
 } // namespace pb

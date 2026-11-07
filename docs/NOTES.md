@@ -801,3 +801,19 @@ then writes the tempo.
 - Not observable without touching the scaffold header: the depth of the retire list, so the test proves the swap by
   processing audio afterwards rather than by counting retirements.
 - Verified: typecheck only. This machine cannot build the macOS project; the plugin CI job is the first real run.
+
+## 2026-11-07 — Card 8.6: the host's tempo and the board's latency
+- Tempo: read once per block from `getPlayHead()` at the top of `PluginProcessor::processBlock`, so a tempo-aware
+  pedal sees the host's BPM on the same block. `MidiClock` gained `setHostTempoOwns()`: while the host reports a
+  tempo the clock keeps measuring but stops writing `board/tempo`, which is what makes "the host always wins" true
+  rather than a race the clock won on every beat. With no host tempo the clock behaves exactly as before.
+- Latency: the reported value is the sum of every slot's `latencySamples()`, the same sum `BoardProcessor`'s dry
+  ring compensates and the app's status line shows, so a bypassed board still reports it. `prepareToPlay` reports it
+  at once (nothing is playing); an edit during playback holds the change until the block's input peak is below
+  1e-5, the rule TUBE's oversampling switch uses (card 5.33).
+- `getTailLengthSeconds` is 8 s: SPRING's decay tops out at 8 s (T60, `external/pump/plugins/spring/SpringParams.hpp`)
+  and every other tail is shorter. Zero would let a host cut a reverb off after a stop.
+- The header field is not read-only in the plugin yet: that field lives in the editor, which is card 8.5.
+- Not covered by a test: the held-until-silence deferral, because the tests cannot rely on a built-in pedal reporting
+  a non-zero latency at its default settings. The host-tempo path, the clock precedence and the latency sum are.
+- Verified: typecheck only; nothing was built or run on this machine.

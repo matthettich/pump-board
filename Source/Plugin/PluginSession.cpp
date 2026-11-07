@@ -36,6 +36,7 @@ PluginSession::PluginSession()
       model (processor, EffectRegistry::instance(), registry)
 {
     ensureBuiltInEffects();
+    tempoIndex = registry.find (kStateTempoId);
 }
 
 PluginSession::~PluginSession() = default;

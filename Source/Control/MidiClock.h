@@ -21,6 +21,11 @@ void reset() noexcept;
 // True once a clock has arrived and no stop has been seen since.
 bool isRunning() noexcept;
 
+// The plugin's host can supply a tempo of its own. While it does, a running MIDI clock keeps measuring and keeps
+// reporting isRunning(), but must not write `board/tempo`: the host wins, and two sources writing the same value
+// every beat is a fight rather than a feature (card 8.6).
+void setHostTempoOwns (bool owns) noexcept;
+
 // The tempo the last full beat implied, before the registry is written; 0 when no beat has completed yet. The
 // status line and the tests use it.
 double lastMeasuredBpm() noexcept;

@@ -25,6 +25,7 @@ struct State
     double smoothed = 0.0;            // 0: nothing measured yet
     float written = -1.0f;            // the value this clock last put in the registry
     bool running = false;
+    bool hostOwnsTempo = false;       // the plugin's host reports a tempo; this clock must not write (card 8.6)
 };
 
 State state;                          // file scope: no initialisation guard on the audio thread
@@ -120,7 +121,8 @@ bool observe (const juce::MidiBuffer& midi, int numSamples, ParameterRegistry& r
 
                     const auto target = (float) state.smoothed;
 
-                    if (state.tempoIndex != ParameterRegistry::kInvalid
+                    if (! state.hostOwnsTempo
+                        && state.tempoIndex != ParameterRegistry::kInvalid
                         && (state.written < 0.0f || std::abs (target - state.written) >= kWriteThreshold))
                     {
                         registry.set (state.tempoIndex, target);
@@ -146,5 +148,14 @@ bool observe (const juce::MidiBuffer& midi, int numSamples, ParameterRegistry& r
         state.samplePos += (juce::int64) numSamples;
 
     return wrote;
+}
+
+void setHostTempoOwns (bool owns) noexcept
+{
+    state.hostOwnsTempo = owns;
+
+    // Forget what this clock last wrote, so a clock that takes the tempo back from a host is not silent just because
+    // the number it measures happens to match. The flag itself survives reset(): it is a mode, not clock state.
+    state.written = -1.0f;
 }
 } // namespace pb::clock

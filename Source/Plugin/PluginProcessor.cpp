@@ -1,4 +1,5 @@
 #include "Plugin/PluginProcessor.h"
+#include "Control/MidiClock.h"
 
 namespace pb
 {
@@ -14,6 +15,7 @@ PluginProcessor::PluginProcessor()
                                 .withOutput ("Output", juce::AudioChannelSet::stereo(), true))
 {
     session.loadDefaultBoard();
+    tempoIndex = session.getTempoParamIndex();
 }
 
 PluginProcessor::~PluginProcessor()
@@ -39,6 +41,10 @@ void PluginProcessor::prepareToPlay (double sampleRate, int maximumExpectedSampl
     setRateAndBufferSizeDetails (sampleRate, maximumExpectedSamplesPerBlock);
     session.prepare (sampleRate, maximumExpectedSamplesPerBlock);
 
+    // Card 8.6: nothing is playing yet, so the chain's latency can be reported at once rather than waiting for a gap.
+    reportedLatency = chainLatencySamples();
+    setLatencySamples (reportedLatency);
+
     // Card 8.2: the board is edited from the message thread and snapshots are retired at N+2 blocks, so something
     // has to run collectGarbage() even when no editor is open. A host prepares on its message thread; if one did
     // not, the timer is simply not started rather than started from the wrong thread.
@@ -54,6 +60,10 @@ void PluginProcessor::releaseResources()
 
 void PluginProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
 {
+    // Card 8.6: the host's tempo goes in before the board runs, so a tempo-aware pedal sees it on this block rather
+    // than the next one.
+    updateHostTempo();
+
     session.getProcessor().processBlock (buffer, midi);
 }
 
@@ -99,6 +109,17 @@ void PluginProcessor::timerCallback()
 {
     session.collectGarbage();
 
+    // Card 8.6: a latency change is held until the input has been silent, the same rule TUBE's oversampling switch
+    // uses (card 5.33). A host's delay compensation jumping under a held note is audible; in the gap between phrases
+    // it is not. `inPeak` is what arrived this block, before any trim.
+    const int latency = chainLatencySamples();
+
+    if (latency != reportedLatency && session.getProcessor().inputPeak() < 1.0e-5f)
+    {
+        reportedLatency = latency;
+        setLatencySamples (latency);
+    }
+
     if (pendingState.isVoid() || juce::Time::currentTimeMillis() < pendingStateDueMs)
         return;
 
@@ -110,5 +131,43 @@ void PluginProcessor::timerCallback()
 
     if (unbypass)
         session.setBoardBypassed (false);
+}
+
+bool PluginProcessor::updateHostTempo()
+{
+    if (auto* playHead = getPlayHead())
+    {
+        if (const auto position = playHead->getPosition())
+        {
+            if (const auto bpm = position->getBpm())
+            {
+                if (tempoIndex != ParameterRegistry::kInvalid)
+                    session.getRegistry().set (tempoIndex, (float) juce::jlimit (20.0, 300.0, *bpm));
+
+                // The host owns the board's tempo while it reports one. A MIDI clock on the same block keeps
+                // measuring, but must not overwrite what the host just said (card 8.6).
+                clock::setHostTempoOwns (true);
+                return true;
+            }
+        }
+    }
+
+    clock::setHostTempoOwns (false);
+    return false;
+}
+
+int PluginProcessor::chainLatencySamples()
+{
+    int total = 0;
+    auto& model = session.getModel();
+
+    // The same sum the board's own dry ring compensates and the app's status line shows. A bypassed board still
+    // delays by this much: its dry copy is read from the ring this far back.
+    for (int i = 0; i < model.size(); ++i)
+        if (auto* slot = model.at (i))
+            if (auto* effect = slot->getEffect())
+                total += juce::jmax (0, effect->latencySamples());
+
+    return total;
 }
 } // namespace pb

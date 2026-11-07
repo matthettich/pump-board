@@ -46,6 +46,10 @@ public:
     void setBoardBypassed (bool bypassed);
 
     ParameterRegistry& getRegistry() noexcept { return registry; }
+
+    // Card 8.6: cached at construction, so the audio thread can write the host's tempo without a string compare per
+    // block. `board/tempo` is registered by the board's processor, which the session owns, so it exists by now.
+    int getTempoParamIndex() const noexcept { return tempoIndex; }
     MidiRouter& getMidiRouter() noexcept { return midiRouter; }
     KeyRouter& getKeyRouter() noexcept { return keys; }
     LearnController& getLearn() noexcept { return learn; }
@@ -63,6 +67,7 @@ private:
     MacroBank macros;
     BoardProcessor processor;
     BoardModel model;
+    int tempoIndex = ParameterRegistry::kInvalid;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PluginSession)
 };
