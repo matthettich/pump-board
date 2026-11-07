@@ -11,7 +11,12 @@ decision and deviation — read it before changing anything, it is where the tra
   mappings, and the app can be played: sixteen slots, eight macros, MIDI and key mappings, presets with
   program changes, and a measured round trip in Settings. What is left is hand-testing
   (`REVIEW_TEMPLATE.md`) and phases 5–7 (more pedals, custom pedals, the full skin).
-- **Tests:** 2600 expectations, 0 failing, 0 warnings in our code.
+- **Tests:** 2628 expectations in Debug (2608 plain), 0 failing. Last run: 6 Nov 2026 on **Linux** in a cloud
+  session (see "Building on Linux" below) — not yet re-run on the Neo.
+- **Latest pass (6 Nov 2026):** a senior-style review fixed a use-after-free on pedal swap/remove/device change,
+  stale mappings after a pedal goes, empty slots vanishing on load, a click when a latency pedal is switched off,
+  and a dozen smaller bugs; then the whole app was reskinned to Thunder Plus's **IDM PINK & GREEN**. The full list
+  is the last entry in `NOTES.md`; what the review found but did not fix is under "Open from the review" below.
 - **Plan:** `docs/tasks/phase-0.md` … `phase-5-6-7.md`, one card at a time.
 
 ---
@@ -22,7 +27,7 @@ JUCE and pump are **submodules**: clone with `git clone --recurse-submodules` (o
 `git submodule update --init --recursive` in an existing checkout). They are pinned to JUCE 9.0.5
 (`d60b7a7`) and pump `7d981aa` — the exact commits this app is built and tested against. Configure with
 `-DCMAKE_BUILD_TYPE=Debug`: that enables `PB_ALLOCATION_GUARD`, which is where the 20 expectations in
-`AllocationGuardTests` come from, so a plain configure runs 2580 and is otherwise clean.
+`AllocationGuardTests` come from, so a plain configure runs 2608 and is otherwise clean.
 
 ```bash
 cd pump-board
@@ -32,7 +37,7 @@ cmake --build build
 ```
 
 ```bash
-./build/PumpBoardTests_artefacts/Debug/PumpBoardTests          # 2600 expectations
+./build/PumpBoardTests_artefacts/Debug/PumpBoardTests          # 2628 expectations
 open "build/PumpBoard_artefacts/Debug/pump BOARD.app"          # or double-click it in Finder
 ```
 
@@ -69,8 +74,11 @@ target does not link the UI sources.
 - **Board:** insert / replace / remove / move, snapshot publishing with retire-at-N+2 garbage collection,
   sixteen real `SlotView`s, drag to reorder, category-grouped pedal picker, selection, per-pedal on/off, and a
   thin CPU bar per slot plus a `LOAD` figure in the status line (card 5.24).
-- **Skin:** dark by default, light on demand — Settings → SKIN rebuilds the window in the other palette (card
-  5.5). The choice lasts for the session; it is not saved.
+- **Skin:** one skin, Thunder Plus's **IDM PINK & GREEN** (6 Nov 2026; the old dark/light pump palettes and the
+  Settings SKIN switch are gone). Paper `#E9E8E3`, ink `#141414`, pink `#FF2D8A`, green `#1F9E5A`, flat 1.5 px ink
+  outlines, JetBrains Mono everywhere. The palette lives in `style::idm` / `style::Theme` (`PumpStyle.h`); every
+  stock JUCE widget is dressed by `IdmLookAndFeel.h`, set as the default in `Main.cpp`. Pedal category colour:
+  pink for DRIVE/DYNAMICS/FILTER/UTIL, green for TIME/SPACE/MOD.
 - **Editing:** `GenericEffectEditor` builds a panel from any effect's `params()`; values only ever move
   through `ParameterRegistry`; double-click resets to default; skewed params honoured.
 - **Presets:** boards are the JSON `.board` files in `~/Music/pump BOARD/Boards`, listed sorted by name —
@@ -143,7 +151,7 @@ guessing at interaction quality from code.
 5. **Preset format — settled, one loose end.** Phase 4 moved boards to the JSON `.board` format, so the
    `<PUMPBOARD>` XML path is now only a one-time import of `board.xml`. Decide whether to delete
    `BoardPreset`/`PresetLibrary` and their tests, or keep them as the migration path for the next release.
-6. **Fonts and distribution.** Settled (card 5.27): pump's three TTFs are compiled into the app with
+6. **Fonts and distribution.** Settled (card 5.27; since 6 Nov only JetBrains Mono Regular and Bold): the TTFs are compiled into the app with
    `juce_add_binary_data`, so it no longer reads `external/pump` at runtime and looks right on a Mac that has
    neither face installed; the `OFL-*.txt` licences are in the bundle's `Resources`.
 
@@ -230,8 +238,64 @@ card).
 
 ---
 
+## Open from the 6 Nov review (found, checked, not fixed)
+
+Worth doing, roughly in order. Each was confirmed by reading the code, none is a crash.
+
+1. **Adapters mark `dirty` on every block.** `Slot::process` pushes every param every block and most adapters
+   set `dirty = true` unconditionally (ECHO, COMP, CALM, EQ, SNAP, HEAT, BAND, SPRING…), so `setSettings` runs
+   every block; EQ in linear-phase mode rebuilds its kernel periodically even when idle. `PumpTwangAdapter`
+   already does it right (`assignFloat`/`assignInt`): copy that pattern. Pure CPU, but it is most of the idle load.
+2. **A pedal switched back on replays its old tail.** A settled-off slot freezes its pedal's state rather than
+   clearing it. Fix with a fresh successor (`makeSuccessor`) once a slot has been off for ~50 ms, never
+   `reset()` on the audio thread.
+3. **Dry rings at high sample rates.** 8192 per slot / 16384 board are fixed; CALM at 96 kHz reports 16384 and is
+   clamped. Size them from the sample rate in `prepare()`.
+4. **Per-frame waste in the UI.** `GenericEffectEditor`, `MacroStrip` and `MeterBar` repaint at 30 Hz regardless,
+   and `syncSlots` copies every pedal's `params()` (Strings) for 16 slots each tick. Repaint on change; rebuild
+   slot lines only when `registry.changeCounter()` moved.
+5. **`MainContent` is a god object** (~1300 lines: layout, autosave, presets, swap state machine, learn flow,
+   four menus, status text, tempo, overlays). Split out a `BoardSession` (autosave, presets, swap) and a
+   `SlotMenus` helper before adding more to it. `BoardPrototype`'s painted slots/editor duplicate the real
+   components and should go once the `--render` paths use real ones.
+6. **Dense pedals draw tiny dials** (ECHO, TUBE: 12+ params in one row shrink every knob). A second row or a
+   minimum dial size.
+7. **`PresetManager` edges:** a name of only illegal characters becomes `.board` (hidden, so missing from the
+   program-change list); a case-only rename on macOS reports success without renaming; `rename` ignores
+   `moveToTrash`'s result.
+8. **`MidiRouter`'s side table holds 8 routers**; a 9th `publish` deletes the old table immediately (tests only,
+   but a use-after-free if it ever happens with audio running).
+9. **JUCE licence.** JUCE is AGPLv3 or commercial. Fine for personal use; if pump BOARD is ever sold or shipped
+   closed-source, a commercial JUCE licence is needed.
+
+## Building on Linux (cloud agents)
+
+The app is Mac-only, but the suite and the offscreen renders build on Linux for an agent without a Mac. JUCE's
+missing system headers are switched off at configure time:
+
+```bash
+cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS="-DJUCE_ALSA=0 -DJUCE_JACK=0 \
+  -DJUCE_USE_XRANDR=0 -DJUCE_USE_XINERAMA=0 -DJUCE_USE_XCURSOR=0 -DJUCE_USE_XRENDER=0 -DJUCE_USE_XINPUT=0"
+cmake --build build --target PumpBoardTests && ./build/PumpBoardTests_artefacts/Debug/PumpBoardTests
+cmake --build build --target PumpBoard
+xvfb-run -a "build/PumpBoard_artefacts/Debug/pump BOARD" --render-slots slots.png 1.5
+```
+
+GCC warns about a few things Apple clang does not (`-Wshadow` in tests, `-Waddress`); the zero-warning rule is
+judged on the Mac build.
+
 ## Landmines
 
+- **Scaffold headers were changed once, for bugs (6 Nov 2026)**: `Slot.h`, `BoardProcessor.h`,
+  `ParameterRegistry.h`, `BoardModel.h` — listed in the last `NOTES.md` entry for the owner to review. The rule
+  below still stands for everything else.
+- **Never call `setEffect()` or `prepare()` on a slot that is in the live chain.** Swap through
+  `Slot::makeSuccessor()` (what `BoardModel::replace`/`clearSlot` do) or detach the chain first
+  (`BoardProcessor::detachChain`, what `prepareAll` does). This was the worst bug the review found.
+- **A pedal that goes takes its param indices with it, and the registry reuses them.** Anything holding a param
+  index (mappings, macro targets, learn) must be pruned when a pedal is removed or swapped —
+  `MainContent::forgetPedalParams` does it for the UI paths; `apply()` clears the mapping table before
+  `model.clear()`.
 - **Scaffold headers are fixed**: `IEffect.h`, `Slot.h`, `ParameterRegistry.h`, `MidiRouter.h`, `MacroBank.h`
   and the rest carry `SCAFFOLD — fixed interface`. Do not add members to them to make a card easier; work
   around them the way `ITempoAware` does, or raise it as a decision.
@@ -252,8 +316,8 @@ card).
 - **The working copy and the named preset are two different files.** `current.board` is the live state and
   is always written; `Boards/<name>.board` is only written by SAVE / Save As. `current.board` carries the name
   it came from, which is how SAVE knows what to overwrite after a relaunch.
-- **A pending preset swap is a single slot.** A second request inside the 25 ms fade is dropped. A human
-  cannot press two footswitches that fast; a burst of program changes keeps only the last.
+- **A pending preset swap is a single slot, newest wins.** A second request inside the 25 ms fade replaces the
+  pending one (before 6 Nov it ran at once and the older one then landed on top of it).
 - **`board.xml` is read once for migration and never written again.** `PresetLibrary` and `presets/*.xml` are
   unused by the window now (their tests still pass). Delete one side or the other before it confuses someone.
 - **`BoardData` has no tempo, and that is now settled.** The owner's answer was device-wide, so the schema is
@@ -275,6 +339,9 @@ card).
   and the board's (so the bypass crossfade lines up). What it does **not** do is remove the chain's latency: a
   CRUSH or COMP slot still makes everything you hear arrive later — card 5.6 now shows that sum in the status
   line (`BOARD 6.0 ms`) next to the device's round trip, when it is not zero.
+- **A switched-off pedal keeps its latency** (6 Nov): once its fade settles, a slot outputs its dry ring
+  `latency` frames late instead of the undelayed input, so on/off never jumps the timing and the board's latency
+  total is the same whatever is on.
 - **The dry rings are fixed size.** 8192 frames per slot and 16384 for the board, clamped silently beyond that.
   A chain deeper than 340 ms would be compensated only up to the cap.
 - **The latency probe's click bypasses the chain.** It is added to the device's output buffer by a second

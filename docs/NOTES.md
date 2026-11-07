@@ -610,3 +610,68 @@ Asked for by the owner together, to test by hand.
   now written into `HANDOVER.md` next to the build commands.
 - Not verified: a clone on another machine. Everything above ran locally against the public remote; the
   submodule URLs are public, but nobody has cloned it from a clean Mac.
+
+## 2026-11-06 — senior review pass (bugs) and the IDM PINK & GREEN skin
+A whole-codebase review for thread-safety, lifetime and sloppiness, then the owner's reskin. Done by Claude in a
+cloud session: the code was built and the suite run **on Linux** (JUCE with ALSA/JACK/XRandR/XRender off), not on
+the Neo, so anything Mac-specific is unverified. Scaffold headers were changed where a real bug needed it; each one
+is listed so the owner can review it (house rule: the scaffold is fixed without review).
+
+Bugs fixed (worst first):
+- **Pedal swap / remove / device change freed a pedal the audio thread was running.** `BoardModel::replace` and
+  `clearSlot` called `Slot::setEffect` on a slot in the live snapshot (old `EffectPtr` destroyed mid-block, the
+  `indices` vector cleared under the loop), and `prepareAll` re-prepared live slots (`dryBuffer.setSize` and every
+  pedal's buffers reallocated under the callback) — despite `Slot.h` saying setEffect/prepare happen *before* a
+  slot is published. Now: replace/clear build a **successor** `Slot` (`Slot::makeSuccessor`, scaffold change) that
+  adopts the uid and the on switch's registry index and is published in place; the old slot runs out its block and
+  is freed by the normal retire GC. `prepareAll` calls the new `BoardProcessor::detachChain` (publish an empty
+  chain, wait ≤500 ms for two blocks), re-prepares, republishes. The board plays dry for a couple of blocks on a
+  device change. `Slot::process` also refuses blocks bigger than it was prepared for (the gap between a device
+  growing its buffer and the timer re-preparing).
+  - Why the successor releases the old pedal's params early: `ParameterRegistry::add` returns the existing index
+    for a known id, so `slot/<uid>/<param>` must be free before the successor registers it.
+- **Mappings and macro targets survived their pedal.** Removing or swapping a pedal frees its param indices; the
+  registry reuses freed indices, so a footswitch or macro silently started driving the next pedal. `MainContent::
+  forgetPedalParams` prunes both before clear/replace (mappings to the slot's on switch are kept — it survives).
+  `apply()` publishes an empty mapping table before `model.clear()`, and `LearnController::setMappings` cancels an
+  armed learn / pending capture (it pointed at an index that may now be another pedal's).
+- **Empty slots vanished on load.** `apply()` skipped empty positions instead of keeping them, so [DRIVE, -, ECHO]
+  reloaded as [DRIVE, ECHO] (and an unknown pedal id, "left empty", closed the gap too). New
+  `BoardModel::insertEmpty`.
+- **A bypassed latency pedal jumped the signal.** Once a slot's fade settled it returned early with the undelayed
+  input, so the output jumped by the pedal's latency (a click; 4096+ samples for CALM). A settled-off slot now
+  outputs its dry ring at the pedal's latency, so a slot's latency is constant whether on or off and the board's
+  total stays true.
+- **New pedals ignored the board tempo** until the tempo next moved (the push was change-driven only). A publish
+  counter now re-pushes the tempo whenever the chain changes.
+- **`blocksProcessed` was a relaxed increment**; the retire GC's proof needs release ordering on ARM. Now acq_rel.
+- **MIDI learn swallowed the rest of the block** (a cached `learningNow`); a clock with two ticks on one sample
+  restarted the beat; a 17th held key left a Momentary mapping stuck on; the latency probe never finished on a
+  device with no input; registry min/max caches were plain floats rewritten on reuse (now relaxed atomics).
+- **UI:** a preset load came up starred and was written straight back (unbypass moved the change counter); two
+  quick loads let the older one land on top of the newer (now latest-wins); "Type a value..." pre-filled the
+  display text ("Short tank", "1/8") and Return wrote 0 or 1; "+" past the last pedal selected the still-empty
+  slot clicked; Esc did not cancel a macro's Add target; several async menu/dialog callbacks captured raw `this`
+  (now `SafePointer`); the min window was smaller than the fixed layout (now 1300×700); static typefaces and the
+  default look-and-feel are released in `shutdown()`.
+- Removed with the skin switch: the content rebuild it needed, which loaded a stale working copy before the old
+  content saved (an edit in the last 800 ms was lost) and queued a callback holding a raw `this`.
+
+Skin (owner, 6 Nov): Thunder Plus's **IDM PINK & GREEN** (`data-skin="idmpg"` in thunder-plus `beta/index.html`)
+replaces the dark/light pump palettes; one skin, no switch. Paper `#E9E8E3`, panel `#F2F1EC`, panel2 `#DDDCD5`,
+ink `#141414`, ink2 `#505050`, dim `#BDBCB6`, pink `#FF2D8A` (accent, playhead, "red"), green `#1F9E5A` (second).
+Flat and square: 1.5 px ink outlines, no offset block. JetBrains Mono everywhere (bold for the brand); Share Tech
+Mono dropped from the bundle. Category colour: pink for DRIVE/DYNAMICS/FILTER/UTIL, green for TIME/SPACE/MOD.
+Meters run green, pink when hot. `IdmLookAndFeel` dresses every stock widget (menus, alert windows, the device
+selector, combo boxes, text fields) so nothing falls back to JUCE's dark default. The brand reads PUMP BOARD with
+BOARD in pink, as Thunder's `.brand .plus`.
+
+Scaffold headers touched: `Slot.h` (makeSuccessor, ownsRegistrations, preparedBlock), `BoardProcessor.h`
+(detachChain, deviceRunning, publishCount), `ParameterRegistry.h` (atomic caches), `BoardModel.h` (insertEmpty).
+- Verified: Linux Debug build, **2628 expectations pass**, 0 failed (one existing test changed on purpose: an empty
+  or unknown position now stays a position — `BoardStateTests`). New `Tests/ReviewFixesTests.cpp` pins the swap,
+  clear, insertEmpty, prepareAll, tempo-on-insert, learn-mid-block and bypassed-latency fixes. Offscreen renders
+  (`--render-slots`, `--render-editor` for TUBE and ECHO) under Xvfb show the new skin.
+- Not verified: anything on the Neo — clang's warnings, CoreAudio, a real device change mid-play (the
+  `detachChain` wait), swapping a pedal while playing, how the skin looks at Retina scale, and the Settings
+  overlay's device selector in the new look-and-feel (no device on the Linux box, so it was never rendered).

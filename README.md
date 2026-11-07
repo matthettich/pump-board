@@ -51,11 +51,11 @@ open "build/PumpBoard_artefacts/Debug/pump BOARD.app"
 ## Tests
 
 ```bash
-./build/PumpBoardTests_artefacts/Debug/PumpBoardTests     # 2600 expectations, 0 failing
+./build/PumpBoardTests_artefacts/Debug/PumpBoardTests     # 2628 expectations, 0 failing
 ```
 
 The suite covers the engine, the router, macros, presets, every adapter's null test against pump's engine, and
-the allocation guard. A plain configure (no `-DCMAKE_BUILD_TYPE=Debug`) runs **2580**: `AllocationGuardTests`
+the allocation guard. A plain configure (no `-DCMAKE_BUILD_TYPE=Debug`) runs **2608**: `AllocationGuardTests`
 are `#ifdef PB_ALLOCATION_GUARD`, so their 20 expectations only exist in Debug. Both configurations should
 build with **zero warnings** in `Source/` and `Tests/`; pump's and JUCE's headers warn and are left alone.
 
