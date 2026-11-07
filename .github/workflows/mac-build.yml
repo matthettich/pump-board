@@ -31,14 +31,20 @@ jobs:
         run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 
       - name: Build app and tests
-        run: cmake --build build --target PumpBoard PumpBoardTests
+        run: |
+          set -o pipefail
+          cmake --build build --target PumpBoard PumpBoardTests 2>&1 | tee build.log || {
+            # Annotations are readable through the API even where the logs are not: send the errors there.
+            grep -E "error:|Error|FAILED" build.log | head -15 | while IFS= read -r line; do echo "::error title=build::${line}"; done
+            exit 1; }
 
       - name: Run tests
         run: |
           set -o pipefail                     # a failing suite must fail the build, not hide behind tail
-          ./build/PumpBoardTests_artefacts/Release/PumpBoardTests > tests.log 2>&1 || { tail -40 tests.log; exit 1; }
+          report() { grep -E "!!!|FAILED|failed" tests.log | head -15 | while IFS= read -r line; do echo "::error title=tests::${line}"; done; tail -40 tests.log; }
+          ./build/PumpBoardTests_artefacts/Release/PumpBoardTests > tests.log 2>&1 || { report; exit 1; }
           tail -3 tests.log
-          grep -q " 0 failed" tests.log
+          grep -q " 0 failed" tests.log || { report; exit 1; }
 
       - name: Package
         run: |
