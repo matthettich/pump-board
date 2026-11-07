@@ -30,6 +30,21 @@ public:
     // host's saved state.
     void loadDefaultBoard();
 
+    // ---- Card 8.3: host state ----
+    // Message thread. One JSON object: this plugin's tag, the state version, the board file's own document kept as
+    // a string, and the tempo the board was playing at. Storing the .board document rather than a restructured copy
+    // is what keeps a host project and a saved preset from drifting apart.
+    juce::var captureState() const;
+
+    // Message thread. Applies through the same path a preset load uses. False, with the board untouched, for
+    // anything it does not recognise: not an object, another product's state, a version this build does not write,
+    // truncated JSON, or a board document that will not parse.
+    bool restoreState (const juce::var& state);
+
+    // The fade around a restore, for the processor: the board's own bypass smoother is the fade.
+    bool isBoardBypassed() const;
+    void setBoardBypassed (bool bypassed);
+
     ParameterRegistry& getRegistry() noexcept { return registry; }
     MidiRouter& getMidiRouter() noexcept { return midiRouter; }
     KeyRouter& getKeyRouter() noexcept { return keys; }

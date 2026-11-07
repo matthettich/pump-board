@@ -1,10 +1,21 @@
 #include "Plugin/PluginSession.h"
 #include "Effects/EffectRegistry.h"
+#include "Presets/BoardSerializer.h"
+#include "Presets/BoardState.h"
 
 namespace pb
 {
 namespace
 {
+// The envelope around the board document. These keys are the contract with a saved host project, so they are named
+// once here rather than spelled as literals at each use.
+constexpr const char* kStateFormatKey = "format";
+constexpr const char* kStateFormat = "pumpboard-plugin-state";
+constexpr const char* kStateVersionKey = "version";
+constexpr const char* kStateBoardKey = "board";
+constexpr const char* kStateTempoKey = "tempo";
+constexpr const char* kStateTempoId = "board/tempo";
+constexpr int kStateVersion = 1;
 // Two plugin instances share one process, and one registry: registering the pedals twice would assert on the second
 // instance's load. Checking first is also what lets the test binary register them itself if it wants to.
 void ensureBuiltInEffects()
@@ -51,5 +62,77 @@ void PluginSession::loadDefaultBoard()
 
     for (const auto* typeId : chain)
         model.insert (model.size(), typeId);
+}
+
+juce::var PluginSession::captureState() const
+{
+    const int tempoIndex = registry.find (kStateTempoId);
+
+    auto* state = new juce::DynamicObject();
+    state->setProperty (kStateFormatKey, kStateFormat);
+    state->setProperty (kStateVersionKey, kStateVersion);
+    state->setProperty (kStateBoardKey, toJson (capture (model, macros, learn, registry)));
+    state->setProperty (kStateTempoKey,
+                        tempoIndex != ParameterRegistry::kInvalid ? registry.get (tempoIndex) : 120.0f);
+
+    return juce::var (state);
+}
+
+bool PluginSession::restoreState (const juce::var& state)
+{
+    auto* object = state.getDynamicObject();
+
+    if (object == nullptr)
+        return false;
+
+    if (object->getProperty (kStateFormatKey).toString() != kStateFormat)
+        return false;
+
+    const auto version = object->getProperty (kStateVersionKey);
+
+    if (! (version.isInt() || version.isDouble()))
+        return false;
+
+    // Exactly this build's version. An older one has no reader yet, and a newer one was written by a build that knew
+    // more than this one: half-applying it would keep the pedals and lose whatever it added.
+    if ((int) version != kStateVersion)
+        return false;
+
+    const auto boardText = object->getProperty (kStateBoardKey).toString();
+
+    if (boardText.isEmpty())
+        return false;
+
+    // Parse before touching anything: a board that will not read leaves the current one exactly as it was.
+    BoardData data;
+
+    if (! fromJson (boardText, data).ok)
+        return false;
+
+    if (! apply (data, model, macros, learn, registry).ok)
+        return false;
+
+    const int tempoIndex = registry.find (kStateTempoId);
+    const auto tempo = object->getProperty (kStateTempoKey);
+
+    // The registry clamps to the parameter's own range, so a nonsense BPM in a project file cannot reach the clock.
+    if (tempoIndex != ParameterRegistry::kInvalid && (tempo.isInt() || tempo.isDouble()))
+        registry.set (tempoIndex, (float) (double) tempo);
+
+    return true;
+}
+
+bool PluginSession::isBoardBypassed() const
+{
+    const int index = registry.find ("board/bypass");
+    return index != ParameterRegistry::kInvalid && registry.get (index) >= 0.5f;
+}
+
+void PluginSession::setBoardBypassed (bool bypassed)
+{
+    const int index = registry.find ("board/bypass");
+
+    if (index != ParameterRegistry::kInvalid)
+        registry.set (index, bypassed ? 1.0f : 0.0f);
 }
 } // namespace pb

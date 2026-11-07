@@ -33,14 +33,21 @@ public:
     const juce::String getProgramName (int) override { return "Default"; }
     void changeProgramName (int, const juce::String&) override {}
 
-    void getStateInformation (juce::MemoryBlock&) override {}                 // card 8.3
-    void setStateInformation (const void*, int) override {}
+    // Card 8.3: the host's own save and restore, called on the host's main thread.
+    void getStateInformation (juce::MemoryBlock&) override;
+    void setStateInformation (const void*, int) override;
 
     PluginSession& getSession() noexcept { return session; }
 
 private:
-    void timerCallback() override { session.collectGarbage(); }
+    void timerCallback() override;
+    void beginStateRestore (const juce::var& state);
 
     PluginSession session;
+
+    // A restore waits one fade behind the bypass, so the swap never lands on a live chain.
+    juce::var pendingState;
+    juce::int64 pendingStateDueMs = 0;
+    bool pendingStateUnbypass = false;
 };
 } // namespace pb

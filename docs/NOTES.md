@@ -786,3 +786,18 @@ board, as in the app), `processBlock` straight into `BoardProcessor`, no editor 
 - Verified: all five new or changed sources pass `g++ -std=c++20 -fsyntax-only -Wall -Wextra -Werror` against the
   pinned JUCE headers. Not verified: the build itself, the unit tests and a host load — this machine has no cmake,
   no freetype/X11 headers and is Linux, so the `plugin` CI job is the first real check.
+
+## 2026-11-07 — Card 8.3: the host's own save and restore
+`getStateInformation` writes one JSON object: a format tag, a version, the tempo, and the board as the `.board`
+document itself (as a string, not a restructured copy), so a host project and a saved preset cannot drift apart.
+`setStateInformation` parses before touching anything and applies through the same `apply()` a preset load uses,
+then writes the tempo.
+- Unrecognised state leaves the board exactly as it was: not JSON, cut in half, another product's format, a version
+  this build does not write, or a board document that will not parse. Each case is a test.
+- A restore while the timer is running swaps behind the board's own bypass smoother (bypass, wait 25 ms, swap,
+  unbypass); with nothing playing it lands at once. A second restore replaces the first, as two quick program
+  changes do in the app.
+- The plugin still reads no settings file and no working copy: state is the host's project and nothing else.
+- Not observable without touching the scaffold header: the depth of the retire list, so the test proves the swap by
+  processing audio afterwards rather than by counting retirements.
+- Verified: typecheck only. This machine cannot build the macOS project; the plugin CI job is the first real run.

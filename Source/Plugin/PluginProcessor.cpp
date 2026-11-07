@@ -2,6 +2,12 @@
 
 namespace pb
 {
+namespace
+{
+// Longer than the bypass smoother's 10 ms ramp, so the board is fully dry before the slots underneath it change.
+constexpr juce::int64 kStateFadeMs = 25;
+} // namespace
+
 PluginProcessor::PluginProcessor()
     : juce::AudioProcessor (BusesProperties()
                                 .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
@@ -49,5 +55,60 @@ void PluginProcessor::releaseResources()
 void PluginProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
 {
     session.getProcessor().processBlock (buffer, midi);
+}
+
+void PluginProcessor::getStateInformation (juce::MemoryBlock& destination)
+{
+    const auto json = juce::JSON::toString (session.captureState(), false);
+    destination.replaceAll (json.toRawUTF8(), (size_t) json.getNumBytesAsUTF8());
+}
+
+void PluginProcessor::setStateInformation (const void* data, int sizeInBytes)
+{
+    if (data == nullptr || sizeInBytes <= 0)
+        return;
+
+    juce::var state;
+
+    // Anything that is not JSON is not our business, and is dropped without touching the board.
+    if (juce::JSON::parse (juce::String::fromUTF8 ((const char*) data, sizeInBytes), state).failed())
+        return;
+
+    beginStateRestore (state);
+}
+
+void PluginProcessor::beginStateRestore (const juce::var& state)
+{
+    // No audio is running (a host usually restores before prepareToPlay), so there is nothing to click and the swap
+    // can land at once.
+    if (! isTimerRunning())
+    {
+        session.restoreState (state);
+        return;
+    }
+
+    // Otherwise the board's own bypass smoother is the fade: bypass, swap, unbypass. A second restore while one is
+    // waiting replaces it, as two quick program changes do in the app.
+    pendingState = state;
+    pendingStateDueMs = juce::Time::currentTimeMillis() + kStateFadeMs;
+    pendingStateUnbypass = ! session.isBoardBypassed();
+    session.setBoardBypassed (true);
+}
+
+void PluginProcessor::timerCallback()
+{
+    session.collectGarbage();
+
+    if (pendingState.isVoid() || juce::Time::currentTimeMillis() < pendingStateDueMs)
+        return;
+
+    auto state = std::move (pendingState);
+    pendingState = juce::var();
+    const bool unbypass = pendingStateUnbypass;
+
+    session.restoreState (state);
+
+    if (unbypass)
+        session.setBoardBypassed (false);
 }
 } // namespace pb
