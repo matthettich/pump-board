@@ -881,3 +881,17 @@ Nothing per-pedal, as decided before card 8.1.
   `slot/3/on` name that pedal's new position while the pedal keeps its own switch; a full automation pass allocates
   nothing.
 - Verified: typecheck only; the tests themselves run in the macOS `build` CI job.
+
+## 2026-11-07 — CI: the plugin had never actually built
+The `plugin` job has been red since card 8.1, and the `::error` annotations say why: JUCE 9's VST3 wrapper refuses to
+compile — `error: You may have a conflict with parameter automation between VST2 and VST3 versions of your plugin` —
+unless `JUCE_VST3_CAN_REPLACE_VST2` is turned off or one of the parameter-id compatibility switches is set. The app and
+the test suite never noticed, because neither compiles the plugin-client wrapper; that is exactly why the plan put the
+plugin in its own CI job.
+- Fixed the way the wrapper's own comment prescribes for a plugin that has released neither format: VST3 only, with
+  `JUCE_VST3_CAN_REPLACE_VST2=0` on the plugin target. Disabling VST2 replacement mode is the correct choice, not just
+  the convenient one: this JUCE cannot build VST2, so there is no migration to preserve.
+- The failure was found from the failing step's annotations, which are readable through the API where the job log is
+  not. Worth remembering for the next red run on this repository.
+- The AU target had not been reached either, so anything else behind this error is still unknown until the job is
+  green.

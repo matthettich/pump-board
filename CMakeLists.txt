@@ -179,6 +179,11 @@ target_link_libraries(PumpBoardPluginSupport PUBLIC PumpBoardCore PumpBoardUI)
 
 target_sources(PumpBoardPlugin PRIVATE Source/Plugin/PluginEntry.cpp)
 target_link_libraries(PumpBoardPlugin PRIVATE PumpBoardPluginSupport PumpBoardFonts juce::juce_gui_extra)
+# The VST3 wrapper will not compile until a plugin says where it stands on VST2/VST3 parameter migration. Nothing is
+# released yet and this JUCE cannot build VST2 at all, which is the case the wrapper's own comment covers: ship VST3
+# only and turn the VST2 replacement mode off. Found in CI, not in a build here: the plugin job reports it as
+# "You may have a conflict with parameter automation between VST2 and VST3 versions of your plugin".
+target_compile_definitions(PumpBoardPlugin PRIVATE JUCE_VST3_CAN_REPLACE_VST2=0)
 
 # ---- Tests ----
 juce_add_console_app(PumpBoardTests PRODUCT_NAME "PumpBoardTests")
