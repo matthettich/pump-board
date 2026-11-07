@@ -121,9 +121,21 @@ juce_add_gui_app(PumpBoard
     MICROPHONE_PERMISSION_ENABLED TRUE
     MICROPHONE_PERMISSION_TEXT "pump BOARD needs audio input to process your instrument.")
 
-file(GLOB_RECURSE PB_APP_SOURCES CONFIGURE_DEPENDS Source/App/*.cpp Source/UI/*.cpp)
+# ---- UI (card 8.5) ----
+# The board's content is shared by the app window and the plugin editor, so it cannot live in the app target: this
+# links the core and the fonts, and nothing from Source/App. The device picker stays behind, because it is the one
+# panel that talks to AudioEngine, which a plugin does not have.
+file(GLOB_RECURSE PB_UI_SOURCES CONFIGURE_DEPENDS Source/UI/*.cpp)
+# The device picker is the one panel that talks to AudioEngine, so it is compiled into the app instead. A regex
+# rather than a full path: GLOB answers with absolute paths, and this does not care how the tree is mounted.
+list(FILTER PB_UI_SOURCES EXCLUDE REGEX "/SettingsView\\.cpp$")
+add_library(PumpBoardUI STATIC ${PB_UI_SOURCES})
+set_target_properties(PumpBoardUI PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
+target_link_libraries(PumpBoardUI PUBLIC PumpBoardCore PumpBoardFonts juce::juce_gui_extra)
+
+file(GLOB_RECURSE PB_APP_SOURCES CONFIGURE_DEPENDS Source/App/*.cpp Source/UI/SettingsView.cpp)
 target_sources(PumpBoard PRIVATE ${PB_APP_SOURCES})
-target_link_libraries(PumpBoard PRIVATE PumpBoardCore PumpBoardFonts juce::juce_gui_extra)
+target_link_libraries(PumpBoard PRIVATE PumpBoardUI PumpBoardFonts juce::juce_gui_extra)
 
 set(PB_FONT_LICENCES
     ${CMAKE_SOURCE_DIR}/external/pump/common/fonts/OFL-JetBrainsMono.txt)
@@ -159,9 +171,11 @@ juce_add_plugin(PumpBoardPlugin
 # does not: createPluginFilter belongs to the bundle, and a test binary has no host to hand it to.
 add_library(PumpBoardPluginSupport STATIC
     Source/Plugin/PluginSession.cpp
-    Source/Plugin/PluginProcessor.cpp)
+    Source/Plugin/PluginProcessor.cpp
+    Source/Plugin/PluginParameters.cpp
+    Source/Plugin/PluginEditor.cpp)
 set_target_properties(PumpBoardPluginSupport PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
-target_link_libraries(PumpBoardPluginSupport PUBLIC PumpBoardCore)
+target_link_libraries(PumpBoardPluginSupport PUBLIC PumpBoardCore PumpBoardUI)
 
 target_sources(PumpBoardPlugin PRIVATE Source/Plugin/PluginEntry.cpp)
 target_link_libraries(PumpBoardPlugin PRIVATE PumpBoardPluginSupport PumpBoardFonts juce::juce_gui_extra)

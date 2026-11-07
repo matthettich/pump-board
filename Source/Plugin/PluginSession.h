@@ -1,7 +1,7 @@
 #pragma once
 // Card 8.2: the non-UI half of the plugin — everything that has to outlive the editor. A host prepares and runs a
 // plugin it has never shown, so the registry, the routers, the board and the processor that plays it cannot live in
-// a window. The app keeps its own copies inside MainContent, where a window always exists; this is the plugin's.
+// a window. The app keeps its own copies in its window, where a window always exists; this is the plugin's.
 #include "Control/KeyRouter.h"
 #include "Control/LearnController.h"
 #include "Control/MacroBank.h"
@@ -9,6 +9,7 @@
 #include "Control/ParameterRegistry.h"
 #include "Engine/BoardModel.h"
 #include "Engine/BoardProcessor.h"
+#include <functional>
 
 namespace pb
 {
@@ -26,6 +27,10 @@ public:
     // from the processor's own timer, which is why it does not need an editor to exist.
     void collectGarbage();
 
+    // Card 8.5: while an editor is open its own timer drains the router's events (learn results, program changes);
+    // with no editor there is nobody to hear them, and an undrained FIFO would fill up for the life of the plugin.
+    void setEditorAttached (bool attached);
+
     // The board the plugin opens on: the same three pedals the app starts with. Card 8.3 replaces this with the
     // host's saved state.
     void loadDefaultBoard();
@@ -40,6 +45,10 @@ public:
     // anything it does not recognise: not an object, another product's state, a version this build does not write,
     // truncated JSON, or a board document that will not parse.
     bool restoreState (const juce::var& state);
+
+    // Card 8.5: set by the editor. A restore frees the slots underneath it, so it has to re-point at the new chain
+    // before its panel's timer can touch a freed one. Called on the message thread, only after a restore succeeded.
+    std::function<void()> onBoardReplaced;
 
     // The fade around a restore, for the processor: the board's own bypass smoother is the fade.
     bool isBoardBypassed() const;
@@ -68,6 +77,7 @@ private:
     BoardProcessor processor;
     BoardModel model;
     int tempoIndex = ParameterRegistry::kInvalid;
+    bool editorAttached = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PluginSession)
 };

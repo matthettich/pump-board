@@ -1,4 +1,5 @@
 #include "Plugin/PluginProcessor.h"
+#include "Plugin/PluginEditor.h"
 #include "Control/MidiClock.h"
 
 namespace pb
@@ -12,10 +13,17 @@ constexpr juce::int64 kStateFadeMs = 25;
 PluginProcessor::PluginProcessor()
     : juce::AudioProcessor (BusesProperties()
                                 .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
-                                .withOutput ("Output", juce::AudioChannelSet::stereo(), true))
+                                .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
+      parameters (session.getRegistry(), session.getMacros(), session.getModel())
 {
     session.loadDefaultBoard();
     tempoIndex = session.getTempoParamIndex();
+
+    // Card 8.4: the parameters have to exist before a host asks for them, which is now — the wrapper queries them as
+    // soon as the processor is constructed — and after the default board, so the sixteen switches point at slots
+    // that are really there.
+    parameters.addTo (*this);
+    parameters.refreshChain();
 }
 
 PluginProcessor::~PluginProcessor()
@@ -106,7 +114,9 @@ void PluginProcessor::beginStateRestore (const juce::var& state)
     // can land at once.
     if (! isTimerRunning())
     {
-        session.restoreState (state);
+        if (session.restoreState (state))
+            afterBoardRestored();
+
         return;
     }
 
@@ -128,6 +138,13 @@ void PluginProcessor::timerCallback()
 {
     session.collectGarbage();
 
+    // Card 8.4: the slot switches follow the chain, and a value that moved in the board is announced to the host
+    // exactly once. Both are message-thread work, which is what hosts require for names and gestures.
+    if (parameters.refreshChain())
+        updateHostDisplay();
+
+    parameters.poll();
+
     // Card 8.6: a latency change is held until the input has been silent, the same rule TUBE's oversampling switch
     // uses (card 5.33). A host's delay compensation jumping under a held note is audible; in the gap between phrases
     // it is not. `inPeak` is what arrived this block, before any trim.
@@ -146,10 +163,19 @@ void PluginProcessor::timerCallback()
     pendingState = juce::var();
     const bool unbypass = pendingStateUnbypass;
 
-    session.restoreState (state);
+    if (session.restoreState (state))
+        afterBoardRestored();
 
     if (unbypass)
         session.setBoardBypassed (false);
+}
+
+void PluginProcessor::afterBoardRestored()
+{
+    // The chain underneath the automation moved, so slot/N/on now drive different pedals; and every parameter's value
+    // came from the host's own state, so it must not be echoed back to it as a change (cards 8.3, 8.4).
+    parameters.refreshChain();
+    parameters.resync();
 }
 
 bool PluginProcessor::updateHostTempo()

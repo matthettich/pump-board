@@ -58,10 +58,21 @@ void PluginSession::prepare (double sampleRate, int maximumBlockSize)
     model.prepareAllForHost (processor.getSampleRateHz(), processor.getMaxBlock());
 }
 
+void PluginSession::setEditorAttached (bool attached)
+{
+    editorAttached = attached;
+}
+
 void PluginSession::collectGarbage()
 {
     processor.collectGarbage();
     midiRouter.collectGarbage();
+
+    // Card 8.5: with no editor, nobody drains the router's events, so a learn result or a program change would sit in
+    // the FIFO for the life of the plugin. Dropping them is the honest answer for now: card 8.7 gives program changes
+    // a home that does not need a window.
+    if (! editorAttached)
+        midiRouter.drainEvents ([] (const ControlEvent&) {});
 }
 
 void PluginSession::loadDefaultBoard()
@@ -127,6 +138,11 @@ bool PluginSession::restoreState (const juce::var& state)
     // The registry clamps to the parameter's own range, so a nonsense BPM in a project file cannot reach the clock.
     if (tempoIndex != ParameterRegistry::kInvalid && (tempo.isInt() || tempo.isDouble()))
         registry.set (tempoIndex, (float) (double) tempo);
+
+    // Card 8.5: the slots the editor may be holding are gone with the old chain. Tell it before returning, so its
+    // panel is re-pointed before its own timer can run again.
+    if (onBoardReplaced != nullptr)
+        onBoardReplaced();
 
     return true;
 }

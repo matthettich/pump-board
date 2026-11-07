@@ -3,6 +3,7 @@
 // BoardProcessor, and this is the plug socket around it. Cards 8.3–8.7 fill in state, parameters, the editor, host
 // sync and programs.
 #include "Plugin/PluginSession.h"
+#include "Plugin/PluginParameters.h"
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_events/juce_events.h>
 
@@ -26,8 +27,8 @@ public:
     // to keep rendering after a stop, so zero would cut a reverb off mid-flight.
     double getTailLengthSeconds() const override { return 8.0; }
 
-    juce::AudioProcessorEditor* createEditor() override { return nullptr; }   // card 8.5
-    bool hasEditor() const override { return false; }
+    juce::AudioProcessorEditor* createEditor() override;      // card 8.5
+    bool hasEditor() const override { return true; }
 
     int getNumPrograms() override { return 1; }                               // card 8.7
     int getCurrentProgram() override { return 0; }
@@ -40,14 +41,17 @@ public:
     void setStateInformation (const void*, int) override;
 
     PluginSession& getSession() noexcept { return session; }
+    PluginParameters& getAutomation() noexcept { return parameters; }
 
 private:
     void timerCallback() override;
     void beginStateRestore (const juce::var& state);
+    void afterBoardRestored();
     bool updateHostTempo();
     int chainLatencySamples();
 
     PluginSession session;
+    PluginParameters parameters;    // card 8.4: the automation surface, built from the session's own registry
 
     // A restore waits one fade behind the bypass, so the swap never lands on a live chain.
     juce::var pendingState;

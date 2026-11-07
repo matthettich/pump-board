@@ -834,3 +834,50 @@ input.
 - Card 8.5 (the editor) is deliberately not here. It moves ~1,200 lines of the app's window into a shared component,
   and this machine cannot build or run the app, so it waits for a green CI run rather than risking the standalone.
 - Verified: typecheck only; the tests themselves run in the macOS `build` CI job.
+
+## 2026-11-07 — Card 8.5: the editor, without the device
+`MainContent` left `MainWindow.cpp` as `Source/UI/BoardContent.{h,cpp}` — the board's whole window content — behind a
+new `Source/UI/HostServices.h`, and the app window is now a frame around it. `Source/Plugin/PluginEditor.{h,cpp}` is
+`BoardContent` plus a host adapter, so there is one board UI in the repository rather than two that drift.
+- `HostServices` asks five questions: the summary the status line prints, the settings overlay (or none), the working
+  board file (or none), whether the tempo is editable, and whether the host prepares the board itself. The standalone
+  answers with `AudioEngine`; the plugin answers with the host and hides SETTINGS, having no device to pick.
+- The skin is applied to the content subtree (`setLookAndFeel` on `BoardContent`), never to the process. An
+  `AlertWindow` is not a child of the content, so every dialog is handed that look-and-feel by hand and gives it back
+  before JUCE deletes the window; menus are parented to children and inherit it. The app keeps its default.
+- Ownership moved as the plan required: `KeyRouter`, `LearnController` and `MacroBank` are now the window's and go
+  into the content by reference, so a reskin rebuilds the content without resetting the macros. `BoardContent`'s
+  destructor clears the four callbacks it put on those objects, because in a plugin the session outlives the editor.
+- The working copy is the host's decision: `loadWorkingBoard`, the 800 ms autosave, the legacy `board.xml` import, the
+  save on close and the device-wide tempo setting all no-op when the host has no working file. That is what keeps a
+  plugin instance from reading or writing the standalone's board.
+- A restore replaces the chain under an open panel, which would leave `GenericEffectEditor` holding a freed `Slot*`.
+  `PluginSession::onBoardReplaced`, set by the editor and called after a successful restore, makes the content
+  re-point before its timer can run again.
+- `PluginSession::setEditorAttached`: with no editor the router's event FIFO had no reader and would fill up for the
+  life of the plugin, so the session drops those events. Card 8.7 gives program changes a home that needs no window.
+- `PumpBoardUI` is a new static library for `Source/UI` minus `SettingsView.cpp`, the one panel that talks to
+  `AudioEngine`; the app and the plugin both link it.
+- Verified: `g++ -fsyntax-only -Wall -Wextra -Werror` on every touched translation unit, with a stub for the generated
+  `FontData.h`. Not built, linked or run: this machine has no cmake and the project is macOS-only.
+
+## 2026-11-07 — Card 8.4: automation
+`Source/Plugin/PluginParameters.{h,cpp}`: 27 parameters, each a `juce::AudioProcessorParameterWithID` reading and
+writing one registry index — eight macros, `board/bypass`, `board/inputTrim`, `board/outputTrim` and `slot/0..15/on`.
+Nothing per-pedal, as decided before card 8.1.
+- Host to board is `setValue`, writing the registry directly; `ParameterRegistry::set` is already any-thread and
+  lock-free, which is what makes that safe on the audio thread.
+- Board to host is `poll()` on the processor's 30 Hz timer. It compares the registry against the last value the
+  parameter itself pushed, so a knob, a macro or a mapped footswitch is announced exactly once and a host's own write
+  is never echoed back. A change counter could not tell the two directions apart.
+- Gestures: `beginChangeGesture()` is not virtual in this JUCE, so the parameter registers itself as its own listener
+  and records `parameterGestureChanged`. While a host holds a control, the poll updates its record without notifying.
+- Automation follows the slot. `slot/N/on` keeps naming position N, and `refreshChain()` re-points the sixteen
+  switches at the current chain every tick, so an empty slot's parameter is kInvalid and never touches the registry.
+  `updateHostDisplay()` is called only when the chain's identity or a macro's name changed.
+- A restore resyncs every parameter without notifying: those values came from the host.
+- `Tests/PluginParameterTests.cpp`: the parameter list is the chosen set; host automation reaches the board; a board
+  change is announced once; a host gesture is not interrupted; inserting a pedal in front of position 2 makes
+  `slot/3/on` name that pedal's new position while the pedal keeps its own switch; a full automation pass allocates
+  nothing.
+- Verified: typecheck only; the tests themselves run in the macOS `build` CI job.
