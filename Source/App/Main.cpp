@@ -81,7 +81,11 @@ public:
                 }
             }
 
-            const auto category = typeId == "pump.tube" ? "DRIVE" : (typeId == "pump.echo" ? "TIME" : "SPACE");
+            juce::String category ("UTIL");          // the pedal's real category, as the running board shows it
+
+            for (const auto& descriptor : pb::EffectRegistry::instance().list())
+                if (descriptor.typeId == typeId)
+                    category = descriptor.category.toUpperCase();
             board.setSlotState (0, previewEffect != nullptr ? previewEffect->displayName() : juce::String ("EMPTY"),
                                 category, true, lines[0], lines[1]);
             board.setSelectedSlot (0);
