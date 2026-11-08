@@ -796,6 +796,10 @@ not for merging. Every finding was checked against the code before changing anyt
 - Fixed in the checklist as a result: test 1 said "three pedals are on the board", which is only true of a
   first launch. It now says the last saved board's pedals, names the seeded chain as the no-file case, and says
   `restored N pedal(s)` is the figure that has to match.
-- The saved board is 7 pedals, name empty, no macros, no mappings: `pump.tube` (off), then six more.
+- The saved board is 7 pedals, name empty, 8 macros (the default `MACRO 1..8` bank, every one with no
+  targets), no mappings: `pump.tube` (off), `pump.echo`, `pump.spring`, `pump.swirl`, `pump.tone`,
+  a second `pump.spring`, `pump.twang`. Recorded rather than assumed: my first pass at this card said
+  "no macros" because the file's macro array is not empty — eight default entries are written whether or
+  not anything is assigned, so a reader counting macros from the JSON would have been misled.
 - Not verified: how any of it sounds, and whether the window actually drew correctly — I read the log and the
   process, I did not look at the screen or hear a pedal.
