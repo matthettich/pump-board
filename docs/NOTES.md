@@ -1068,3 +1068,7 @@ plugin in its own CI job.
 - **And it cost two passes for a second reason:** the step filtered the build log for `error:` alone, so the first
   failure's annotation named only clang's summary line. The pattern now carries `Undefined symbols`, `referenced from`
   and `ld:` as well — the same lesson the app's build step had already learned.
+- **Verified in CI, third pass, run 35 on `2b19541`:** the plugin job green from end to end — both formats built,
+  `auval` passed, the bundle check passed, the validator built on the runner, **the validator loaded
+  `pump BOARD.vst3` and its test suite passed**, and the plugin zip packaged and uploaded. Two annotations on that
+  job, both notices about the runner, not findings. The app job on the same commit is untouched by any of this.
