@@ -969,11 +969,16 @@ plugin in its own CI job.
 - Not done, and waiting on the same thing as the app: signing and notarisation. Both jobs still produce unsigned
   bundles and say so in the release notes and the install note. When a developer account exists, the signing steps
   belong in the same two jobs, for both products at once.
-- Verified: CI run 24 on `40d790a` (the commit before this one) completed **success** in both jobs, so the
-  `BoardContent` destructor change and the macro-name fix are confirmed by a real build and the full suite rather than
-  only by a parse. The packaging and publishing steps cannot be run on this Linux machine: the packaging step's first
-  real run is the next CI push, and the publish job only runs on `main`, so its first execution is whenever this
-  reaches `main`.
+- Verified: CI run 24 on `40d790a` completed **success** in both jobs, so the editor and automation fixes it carries
+  (the reskin callback order, the host notification after a restore, the macro names, the editor's thread dispatch) are
+  confirmed by a real build and the full suite rather than only by a parse.
+- Not verified, and worth knowing: the `BoardContent` destructor change was written in the same sitting but was still
+  uncommitted when run 24 started, so it landed in this commit instead and has no CI pass behind it yet. The packaging
+  and publishing steps cannot be run on this Linux machine either: the packaging step's first real run is the next CI
+  push, and the publish job only runs on `main`, so its first execution is whenever this reaches `main`.
+- Also found: after main moved, PR #2 went into conflict and GitHub stopped creating runs for it entirely — no run
+  appears for a push to a conflicting PR, which reads like "CI is broken" rather than "merge main". Merging main in (a
+  merge, not a rebase, so the PR history stays reviewable) put it back in a state CI can run against.
 ## 2026-11-08 — smoke test of the rebuilt app, and the checklist's "three pedals"
 - Launched `build/PumpBoard_artefacts/Debug/pump BOARD.app` from the shell with output captured. Log:
   `JUCE v9.0.5`, `pump BOARD: 3 slot(s) published`, `pump BOARD: restored 7 pedal(s), 0 mapping(s)`. Ran ten
