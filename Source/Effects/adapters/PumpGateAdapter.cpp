@@ -1,4 +1,5 @@
 #include "Effects/adapters/PumpGateAdapter.h"
+#include "Effects/adapters/AssignHelpers.h"
 #include "Effects/adapters/PumpChoices.h"
 #include <cmath>
 #include <cstring>
@@ -73,25 +74,24 @@ void PumpGateAdapter::setParam (int index, float value) noexcept
 
     switch (index)
     {
-        case kSteps:       settings.steps      = juce::jlimit (1, pump::gate::kMaxSteps, (int) std::lround (value)); break;
-        case kRate:        settings.rate       = juce::jlimit (0, pump::kNumNotes - 1, (int) std::lround (value)); break;
-        case kSwing:       settings.swing      = juce::jlimit (0.0, 75.0, (double) value); break;
-        case kLength:      settings.length     = juce::jlimit (5.0, 100.0, (double) value); break;
-        case kAttack:      settings.attack     = juce::jlimit (0.0, 50.0, (double) value); break;
-        case kRelease:     settings.release    = juce::jlimit (0.0, 500.0, (double) value); break;
-        case kSmooth:      settings.smooth     = juce::jlimit (0.0, 100.0, (double) value); break;
-        case kDepth:       settings.depth      = juce::jlimit (0.0, 100.0, (double) value); break;
-        case kMode:        settings.mode       = juce::jlimit (0, pump::gate::kNumModes - 1, (int) std::lround (value)); break;
-        case kFilterLow:   settings.filterLow  = juce::jlimit (20.0, 5000.0, (double) value); break;
-        case kFilterHigh:  settings.filterHigh = juce::jlimit (200.0, 20000.0, (double) value); break;
-        case kResonance:   settings.resonance  = juce::jlimit (0.0, 100.0, (double) value); break;
-        case kStereoOffset: settings.offset    = juce::jlimit (0, 16, (int) std::lround (value)); break;
-        case kMix:         settings.mix        = juce::jlimit (0.0, 100.0, (double) value); break;
-        case kOutGain:     settings.outDb      = juce::jlimit (-24.0, 24.0, (double) value); break;
+        case kSteps:       assignField (settings.steps, juce::jlimit (1, pump::gate::kMaxSteps, (int) std::lround (value)), dirty); break;
+        case kRate:        assignField (settings.rate, juce::jlimit (0, pump::kNumNotes - 1, (int) std::lround (value)), dirty); break;
+        case kSwing:       assignField (settings.swing, juce::jlimit (0.0, 75.0, (double) value), dirty); break;
+        case kLength:      assignField (settings.length, juce::jlimit (5.0, 100.0, (double) value), dirty); break;
+        case kAttack:      assignField (settings.attack, juce::jlimit (0.0, 50.0, (double) value), dirty); break;
+        case kRelease:     assignField (settings.release, juce::jlimit (0.0, 500.0, (double) value), dirty); break;
+        case kSmooth:      assignField (settings.smooth, juce::jlimit (0.0, 100.0, (double) value), dirty); break;
+        case kDepth:       assignField (settings.depth, juce::jlimit (0.0, 100.0, (double) value), dirty); break;
+        case kMode:        assignField (settings.mode, juce::jlimit (0, pump::gate::kNumModes - 1, (int) std::lround (value)), dirty); break;
+        case kFilterLow:   assignField (settings.filterLow, juce::jlimit (20.0, 5000.0, (double) value), dirty); break;
+        case kFilterHigh:  assignField (settings.filterHigh, juce::jlimit (200.0, 20000.0, (double) value), dirty); break;
+        case kResonance:   assignField (settings.resonance, juce::jlimit (0.0, 100.0, (double) value), dirty); break;
+        case kStereoOffset: assignField (settings.offset, juce::jlimit (0, 16, (int) std::lround (value)), dirty); break;
+        case kMix:         assignField (settings.mix, juce::jlimit (0.0, 100.0, (double) value), dirty); break;
+        case kOutGain:     assignField (settings.outDb, juce::jlimit (-24.0, 24.0, (double) value), dirty); break;
         default:           return;
     }
 
-    dirty = true;
 }
 
 void PumpGateAdapter::process (juce::AudioBuffer<float>& buffer) noexcept

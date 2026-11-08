@@ -1,4 +1,5 @@
 #include "Effects/adapters/PumpStutterAdapter.h"
+#include "Effects/adapters/AssignHelpers.h"
 #include "Effects/adapters/PumpChoices.h"
 #include <cmath>
 #include <cstring>
@@ -74,26 +75,25 @@ void PumpStutterAdapter::setParam (int index, float value) noexcept
 
     switch (index)
     {
-        case kTrigger:     settings.trigger    = juce::jlimit (0, pump::stutter::kNumTriggers - 1, (int) std::lround (value)); break;
-        case kInterval:    settings.interval   = juce::jlimit (0, pump::kNumNotes - 1, (int) std::lround (value)); break;
-        case kChance:      settings.chance     = juce::jlimit (0.0, 100.0, (double) value); break;
-        case kLength:      settings.length     = juce::jlimit (0, pump::kNumNotes - 1, (int) std::lround (value)); break;
-        case kGrid:        settings.grid       = juce::jlimit (0, pump::kNumNotes - 1, (int) std::lround (value)); break;
-        case kGate:        settings.gate       = juce::jlimit (5.0, 100.0, (double) value); break;
-        case kPitch:       settings.pitch      = juce::jlimit (-12.0, 12.0, (double) value); break;
-        case kDecay:       settings.decay      = juce::jlimit (0.0, 100.0, (double) value); break;
-        case kFilter:      settings.filter     = juce::jlimit (-100.0, 100.0, (double) value); break;
-        case kVariation:   settings.variation  = juce::jlimit (0.0, 100.0, (double) value); break;
-        case kTape:        settings.tape       = juce::jlimit (10.0, 100.0, (double) value); break;
-        case kMix:         settings.mix        = juce::jlimit (0.0, 100.0, (double) value); break;
-        case kOutGain:     settings.outDb      = juce::jlimit (-24.0, 24.0, (double) value); break;
-        case kPatternOn:   settings.patternOn  = value >= 0.5f; break;
-        case kPattern:     settings.patternSel = juce::jlimit (0, pump::stutter::kUserPattern, (int) std::lround (value)); break;
-        case kPatternStep: settings.patStep    = juce::jlimit (0, pump::kNumNotes - 1, (int) std::lround (value)); break;
+        case kTrigger:     assignField (settings.trigger, juce::jlimit (0, pump::stutter::kNumTriggers - 1, (int) std::lround (value)), dirty); break;
+        case kInterval:    assignField (settings.interval, juce::jlimit (0, pump::kNumNotes - 1, (int) std::lround (value)), dirty); break;
+        case kChance:      assignField (settings.chance, juce::jlimit (0.0, 100.0, (double) value), dirty); break;
+        case kLength:      assignField (settings.length, juce::jlimit (0, pump::kNumNotes - 1, (int) std::lround (value)), dirty); break;
+        case kGrid:        assignField (settings.grid, juce::jlimit (0, pump::kNumNotes - 1, (int) std::lround (value)), dirty); break;
+        case kGate:        assignField (settings.gate, juce::jlimit (5.0, 100.0, (double) value), dirty); break;
+        case kPitch:       assignField (settings.pitch, juce::jlimit (-12.0, 12.0, (double) value), dirty); break;
+        case kDecay:       assignField (settings.decay, juce::jlimit (0.0, 100.0, (double) value), dirty); break;
+        case kFilter:      assignField (settings.filter, juce::jlimit (-100.0, 100.0, (double) value), dirty); break;
+        case kVariation:   assignField (settings.variation, juce::jlimit (0.0, 100.0, (double) value), dirty); break;
+        case kTape:        assignField (settings.tape, juce::jlimit (10.0, 100.0, (double) value), dirty); break;
+        case kMix:         assignField (settings.mix, juce::jlimit (0.0, 100.0, (double) value), dirty); break;
+        case kOutGain:     assignField (settings.outDb, juce::jlimit (-24.0, 24.0, (double) value), dirty); break;
+        case kPatternOn:   assignField (settings.patternOn, value >= 0.5f, dirty); break;
+        case kPattern:     assignField (settings.patternSel, juce::jlimit (0, pump::stutter::kUserPattern, (int) std::lround (value)), dirty); break;
+        case kPatternStep: assignField (settings.patStep, juce::jlimit (0, pump::kNumNotes - 1, (int) std::lround (value)), dirty); break;
         default:           return;
     }
 
-    dirty = true;
 }
 
 void PumpStutterAdapter::process (juce::AudioBuffer<float>& buffer) noexcept

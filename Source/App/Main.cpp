@@ -10,6 +10,7 @@
 #include "UI/BoardPrototype.h"
 #include "UI/MacroStrip.h"
 #include "UI/GenericEffectEditor.h"
+#include "UI/IdmLookAndFeel.h"
 #include "UI/SlotView.h"
 #include "UI/TempoField.h"
 
@@ -22,6 +23,8 @@ public:
 
     void initialise (const juce::String&) override
     {
+        // Every stock widget (menus, alert windows, the device selector) in the IDM pink & green skin.
+        juce::LookAndFeel::setDefaultLookAndFeel (&lookAndFeel);
         // Offscreen render, so the look can be inspected without a window or a device:
         //   "pump BOARD.app/Contents/MacOS/pump BOARD" --render board.png [scale]
         const auto args = getCommandLineParameterArray();
@@ -78,7 +81,11 @@ public:
                 }
             }
 
-            const auto category = typeId == "pump.tube" ? "DRIVE" : (typeId == "pump.echo" ? "TIME" : "SPACE");
+            juce::String category ("UTIL");          // the pedal's real category, as the running board shows it
+
+            for (const auto& descriptor : pb::EffectRegistry::instance().list())
+                if (descriptor.typeId == typeId)
+                    category = descriptor.category.toUpperCase();
             board.setSlotState (0, previewEffect != nullptr ? previewEffect->displayName() : juce::String ("EMPTY"),
                                 category, true, lines[0], lines[1]);
             board.setSelectedSlot (0);
@@ -94,6 +101,9 @@ public:
 
             pb::GenericEffectEditor editor (previewRegistry);
             editor.setSlot (&slot);
+
+            if (args.size() >= 5)
+                editor.setPage (args[4].getIntValue() - 1);     // optional 1-based page to render
 
             const auto area = board.editorBounds();
             editor.setBounds ((int) area.getX(), (int) area.getY(), (int) area.getWidth(), (int) area.getHeight());
@@ -214,6 +224,18 @@ public:
         processor = nullptr;
         midiRouter = nullptr;
         registry = nullptr;
+
+        releaseUi();
+    }
+
+    // The look-and-feel and the static typefaces must go while JUCE is still up: left to static destruction they
+    // outlive the GUI shutdown (leak-detector noise, and a known crash with system typefaces).
+    static void releaseUi()
+    {
+        juce::LookAndFeel::setDefaultLookAndFeel (nullptr);
+        pb::style::fonts::labelTypeface() = nullptr;
+        pb::style::fonts::monoTypeface() = nullptr;
+        pb::style::fonts::boldTypeface() = nullptr;
     }
 
     void systemRequestedQuit() override
@@ -222,6 +244,7 @@ public:
     }
 
 private:
+    pb::style::IdmLookAndFeel lookAndFeel;                 // declared first, so destroyed after the window
     std::unique_ptr<pb::ParameterRegistry> registry;
     std::unique_ptr<pb::MidiRouter> midiRouter;
     std::unique_ptr<pb::BoardProcessor> processor;

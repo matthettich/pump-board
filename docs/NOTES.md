@@ -610,3 +610,214 @@ Asked for by the owner together, to test by hand.
   now written into `HANDOVER.md` next to the build commands.
 - Not verified: a clone on another machine. Everything above ran locally against the public remote; the
   submodule URLs are public, but nobody has cloned it from a clean Mac.
+
+## 2026-11-06 — senior review pass (bugs) and the IDM PINK & GREEN skin
+A whole-codebase review for thread-safety, lifetime and sloppiness, then the owner's reskin. Done by Claude in a
+cloud session: the code was built and the suite run **on Linux** (JUCE with ALSA/JACK/XRandR/XRender off), not on
+the Neo, so anything Mac-specific is unverified. Scaffold headers were changed where a real bug needed it; each one
+is listed so the owner can review it (house rule: the scaffold is fixed without review).
+
+Bugs fixed (worst first):
+- **Pedal swap / remove / device change freed a pedal the audio thread was running.** `BoardModel::replace` and
+  `clearSlot` called `Slot::setEffect` on a slot in the live snapshot (old `EffectPtr` destroyed mid-block, the
+  `indices` vector cleared under the loop), and `prepareAll` re-prepared live slots (`dryBuffer.setSize` and every
+  pedal's buffers reallocated under the callback) — despite `Slot.h` saying setEffect/prepare happen *before* a
+  slot is published. Now: replace/clear build a **successor** `Slot` (`Slot::makeSuccessor`, scaffold change) that
+  adopts the uid and the on switch's registry index and is published in place; the old slot runs out its block and
+  is freed by the normal retire GC. `prepareAll` calls the new `BoardProcessor::detachChain` (publish an empty
+  chain, wait ≤500 ms for two blocks), re-prepares, republishes. The board plays dry for a couple of blocks on a
+  device change. `Slot::process` also refuses blocks bigger than it was prepared for (the gap between a device
+  growing its buffer and the timer re-preparing).
+  - Why the successor releases the old pedal's params early: `ParameterRegistry::add` returns the existing index
+    for a known id, so `slot/<uid>/<param>` must be free before the successor registers it.
+- **Mappings and macro targets survived their pedal.** Removing or swapping a pedal frees its param indices; the
+  registry reuses freed indices, so a footswitch or macro silently started driving the next pedal. `MainContent::
+  forgetPedalParams` prunes both before clear/replace (mappings to the slot's on switch are kept — it survives).
+  `apply()` publishes an empty mapping table before `model.clear()`, and `LearnController::setMappings` cancels an
+  armed learn / pending capture (it pointed at an index that may now be another pedal's).
+- **Empty slots vanished on load.** `apply()` skipped empty positions instead of keeping them, so [DRIVE, -, ECHO]
+  reloaded as [DRIVE, ECHO] (and an unknown pedal id, "left empty", closed the gap too). New
+  `BoardModel::insertEmpty`.
+- **A bypassed latency pedal jumped the signal.** Once a slot's fade settled it returned early with the undelayed
+  input, so the output jumped by the pedal's latency (a click; 4096+ samples for CALM). A settled-off slot now
+  outputs its dry ring at the pedal's latency, so a slot's latency is constant whether on or off and the board's
+  total stays true.
+- **New pedals ignored the board tempo** until the tempo next moved (the push was change-driven only). A publish
+  counter now re-pushes the tempo whenever the chain changes.
+- **`blocksProcessed` was a relaxed increment**; the retire GC's proof needs release ordering on ARM. Now acq_rel.
+- **MIDI learn swallowed the rest of the block** (a cached `learningNow`); a clock with two ticks on one sample
+  restarted the beat; a 17th held key left a Momentary mapping stuck on; the latency probe never finished on a
+  device with no input; registry min/max caches were plain floats rewritten on reuse (now relaxed atomics).
+- **UI:** a preset load came up starred and was written straight back (unbypass moved the change counter); two
+  quick loads let the older one land on top of the newer (now latest-wins); "Type a value..." pre-filled the
+  display text ("Short tank", "1/8") and Return wrote 0 or 1; "+" past the last pedal selected the still-empty
+  slot clicked; Esc did not cancel a macro's Add target; several async menu/dialog callbacks captured raw `this`
+  (now `SafePointer`); the min window was smaller than the fixed layout (now 1300×700); static typefaces and the
+  default look-and-feel are released in `shutdown()`.
+- Removed with the skin switch: the content rebuild it needed, which loaded a stale working copy before the old
+  content saved (an edit in the last 800 ms was lost) and queued a callback holding a raw `this`.
+
+Skin (owner, 6 Nov): Thunder Plus's **IDM PINK & GREEN** (`data-skin="idmpg"` in thunder-plus `beta/index.html`)
+replaces the dark/light pump palettes; one skin, no switch. Paper `#E9E8E3`, panel `#F2F1EC`, panel2 `#DDDCD5`,
+ink `#141414`, ink2 `#505050`, dim `#BDBCB6`, pink `#FF2D8A` (accent, playhead, "red"), green `#1F9E5A` (second).
+Flat and square: 1.5 px ink outlines, no offset block. JetBrains Mono everywhere (bold for the brand); Share Tech
+Mono dropped from the bundle. Category colour: pink for DRIVE/DYNAMICS/FILTER/UTIL, green for TIME/SPACE/MOD.
+Meters run green, pink when hot. `IdmLookAndFeel` dresses every stock widget (menus, alert windows, the device
+selector, combo boxes, text fields) so nothing falls back to JUCE's dark default. The brand reads PUMP BOARD with
+BOARD in pink, as Thunder's `.brand .plus`.
+
+Scaffold headers touched: `Slot.h` (makeSuccessor, ownsRegistrations, preparedBlock), `BoardProcessor.h`
+(detachChain, deviceRunning, publishCount), `ParameterRegistry.h` (atomic caches), `BoardModel.h` (insertEmpty).
+- Verified: Linux Debug build, **2628 expectations pass**, 0 failed (one existing test changed on purpose: an empty
+  or unknown position now stays a position — `BoardStateTests`). New `Tests/ReviewFixesTests.cpp` pins the swap,
+  clear, insertEmpty, prepareAll, tempo-on-insert, learn-mid-block and bypassed-latency fixes. Offscreen renders
+  (`--render-slots`, `--render-editor` for TUBE and ECHO) under Xvfb show the new skin.
+- Not verified: anything on the Neo — clang's warnings, CoreAudio, a real device change mid-play (the
+  `detachChain` wait), swapping a pedal while playing, how the skin looks at Retina scale, and the Settings
+  overlay's device selector in the new look-and-feel (no device on the Linux box, so it was never rendered).
+
+## Open items 1, 3, 4, 6, 7, 8 from the 6 Nov review (pass of 6 Nov, Linux)
+
+- **Item 1, dirty only on change.** New `Source/Effects/adapters/AssignHelpers.h` (`assignField (field, value, dirty)`,
+  exact compare written with `<`/`>` so `-Wfloat-equal` stays quiet). Every adapter's `setParam` (BAND, CALM, CHOP,
+  COMP, CRUSH, ECHO, EQ, GATE, GRAIN, HEAT, LIMIT, SNAP, SPRING, STRIP, STUTTER, SWIRL, TONE, TUBE, VERB, WIDE) uses it;
+  `prepare()`/`reset()` still leave `dirty = true`, so the change pending after prepare (the setSettings landmine) is
+  unchanged. TWANG was left as it was. Null tests are unchanged (difference 0.0 everywhere except WIDE's balanced
+  two-band case, which is the known exception and varies run to run with the same binary).
+  TUBE oversampling: a request back to what the engine already runs now also drops a stale pending request; and since
+  other params no longer re-push `settings.oversampling` every block, the wait-for-silence rule (card 5.33) now holds
+  in a live slot (before, any dirty param pushed the new oversampling at once). Not verified by ear.
+- **Item 3.** `Slot::maxDelayFor` / `BoardProcessor::maxDryDelayFor`; `Slot.h` and `BoardProcessor.h` (scaffold)
+  gained a static, a getter and one int member each. Allocation stays in `prepare` / `prepareToPlay`.
+- **Item 4.** Editor, macro strip and meters repaint when what they draw changed. `MainContent::syncSlots (false)` on
+  the tick skips when `changeCounter()` and a hash of the chain (slot and pedal pointers, count) are unchanged;
+  every explicit caller still forces it.
+- **Item 6.** `GenericEffectEditor::resized` tries one to three balanced rows and keeps the one with the biggest knob
+  whose names still fit; a dense pedal still under 40 px borrows 8 px from under the caption. Checked by `--render-editor`
+  for ECHO and TUBE only (Linux, 1100 px wide).
+- **Item 7.** `fileFor` falls back to "Untitled" and strips leading dots; case-only rename goes through a hidden temp
+  file; `rename` undoes its new copy when the Bin refuses; `PresetManager::setTrashFunction` exists so a test can make
+  it refuse. The case-insensitive path itself (macOS) is exercised on Linux only through the same temp-name route.
+- **Item 8.** `MidiRouter`'s side table is a push-only linked list of `RouterState` nodes (freed at static teardown),
+  so any number of routers get a retire list; the audio thread only walks it with acquire loads. A use-after-free is not
+  observable from a test, so `Tests/OpenItemsTests.cpp` pins the behaviour with twenty live routers.
+- Tests: new `Tests/OpenItemsTests.cpp`.
+
+## 2026-11-06 — new pedals and the paged editor (verified by Claude)
+- pump TUNE, VOX and GRUMBLE added as adapters (category "voice"), pump pinned to `c0da8c7` for GRUMBLE (upstream
+  only added that plugin since `7d981aa`). Null tests bit-identical at 64/128/511. AMP deliberately not added: see
+  HANDOVER "Still open" item 3.
+- The editor pages dense pedals (≤20 controls a page, page keys top right, groups from the param id prefix; a group
+  labels a page only when it has 3+ controls there). `--render-editor out.png 1.0 pump.vox 2` renders page 2.
+- Category colours compare case-insensitively: SWIRL's "modulation" was falling through to pink.
+- Verified: 3204 expectations pass on Linux; renders of VOX (3 pages), GRUMBLE, TUNE, ECHO, TUBE looked at.
+- Not verified: anything on the Mac, page keys clicked live, how the three voice pedals sound on a guitar.
+
+## 2026-11-07 — TWANG went silent at startup (one NaN poisons a pedal), and an app icon
+- Owner: TWANG wasn't passing audio correctly after launching the app; rebuilding the pedal fixed it. Probing the
+  real TWANG through startup, device re-prepare, model/tuning changes and off/on found nothing — but **one NaN
+  sample at the input left it silent for good**: its springs' feedback state goes NaN, the safety limiter turns the
+  output to zero, and only a fresh pedal recovers. A Mac interface can deliver a garbage first buffer when it
+  starts, which fits "at startup". The same applies to any pedal with feedback (reverbs, delays, filters).
+- Fix: `Common/Sanitize.h` `scrubNonFinite`, run on the board's input (before the meter and mono fold) and on every
+  slot's output right after its pedal, so no pedal ever sees a non-finite sample and one that blows up internally
+  cannot take the pedals after it down. A pedal that blows up *internally* still stays silent until it is
+  rebuilt (see HANDOVER, Still open). `Tests/NonFiniteTests.cpp`; both tests fail with the scrub removed.
+- App icon: one compact pedal (pink body, paper knobs and label, green check LED, ink pad) on a paper tile,
+  `Resources/icon.svg` → `Resources/icon-1024.png` (rendered with Chromium so the label uses JetBrains Mono Bold),
+  set as `ICON_BIG` in `CMakeLists.txt`; JUCE builds the .icns from it.
+- Verified: 3212 expectations pass on Linux. The icon's look in the Dock and the startup fix on the Neo are not.
+- Release-only test failure (CI on the Mac, reproduced on Linux): WIDE's "two bands, balanced" null test was off by
+  ~-25 dBFS. Not the NaN change and not a bug in the board: the linear-phase crossover (WIDE, and BAND/HEAT too)
+  gets its kernels from each engine's own **worker thread**, so the adapter's engine and the reference engine
+  swapped kernels a block or two apart and the comparison raced them (Release is fast enough to lose). The three
+  null harnesses now `settleOnSilence` both engines (0.5 s of silence with real time for the workers) before
+  comparing; WIDE/BAND/HEAT null to exactly 0 in Debug and Release. pump's `PUMP_SYNC_KERNELS` would also fix it but
+  moves kernel design onto the audio thread, so it is not used.
+- `PumpBoardTests <name>` now runs only the suites whose name contains `<name>` (e.g. `PumpBoardTests WideNull`).
+
+## 2026-11-07 — CodeRabbit review (PR #1, review-only) — verified and fixed
+PR #1 (`main` against `review/base-2026-11-06` at 885e57e) exists only so CodeRabbit could review this work; it is
+not for merging. Every finding was checked against the code before changing anything:
+- **Learn survived its pedal** (MainWindow): `forgetPedalParams` now cancels an armed/pending learn, which could
+  otherwise commit a mapping onto whatever pedal reused the freed index. Fixed.
+- **MidiRouter's block counter was relaxed** — the same retire-GC ordering bug fixed in BoardProcessor yesterday.
+  Now acq_rel. Fixed.
+- **Tempo push could miss a new chain**: `publishCount` was read after `active`, so a publish between the two
+  loads pushed the tempo to the old chain and marked the new one served. Counter is read first now. Fixed.
+- **TUBE's waiting oversampling leaked into ordinary pushes** (a DRIVE turn mid-note switched it, latency jumped).
+  Pushes now carry the engine's current oversampling until silence. While fixing it: the adapter compared the menu
+  index (0..3) with pump's `engine.oversampling()`, which is the *factor* (1, 2, 4, 8) — never equal, so a switch
+  looked pending on every block. `engineOversamplingIndex()` converts. Two new tests in TubeOversamplingTests (the
+  first fails without the fix).
+- README licence paragraph named fonts the app no longer ships. Fixed.
+- **Not fixed here (pump's code):** GRUMBLE's engine keeps the *mono sum* as its dry signal, so at MIX below 100 a
+  stereo input collapses to mono. Harmless on a guitar board (the input is mono and the board folds it to both
+  sides), but it belongs in pump: noted in HANDOVER.
+- Verified: 3216 expectations (Debug), 3148 (Release) on Linux.
+- GRUMBLE's mono dry path fixed **in pump** (matthettich/pump 419fbcf: a latency-aligned dry line per channel; the
+  mono sum still drives the creature) and the submodule bumped to it. pump's own mix-0 test now uses a different,
+  opposite-phase right channel and fails on the old engine. pump BOARD: 3216 expectations pass.
+
+## 2026-11-08 — card 5.36 (hand-test checklist reordered and renumbered)
+- The checklist in `REVIEW_TEMPLATE.md` had grown by appending, and it showed: two items numbered 15 and two
+  numbered 16, so "test 15" meant two different things. It satisfied the letter of the plan (a checklist) while
+  defeating its purpose (a human knows what to do first).
+- Renumbered as one flat list 1-21 and split into "First: the eight that matter" / "The rest, when you have
+  time". Order is by what a failure costs: launch and restore, then dry-vs-wet, then the things changed most
+  recently under the fingers, then save/restore, knobs, key-learn, and the ten-minute soak last because it is
+  the only test that spends real time.
+- Three tests are new, because recent fixes had no checklist item covering them: TWANG ringing at MIX 100 and
+  across all six SPRING MODEL positions (5.31, 5.34) plus a cold launch with TWANG loaded (the 7 Nov NaN card —
+  that failure only appears on a fresh launch); TUBE oversampling changing only once playing stops (5.33); and
+  a clock source driving the tempo field (5.32), folded into the device-tempo test. Each names its card, so a
+  failure points at a specific change rather than "TWANG is broken".
+- Dropped a stale line: "Not testable yet: renaming or deleting a preset" contradicted the rename/delete test
+  three items above it, and "the tempo coming back with a board" is the design, not a gap. The closing line now
+  names the three tests that need gear (footswitch, loopback cable, clock source).
+- This landed on a `main` that had moved 14 commits ahead (CI, the release workflow, TUNE/VOX/GRUMBLE, the TWANG
+  NaN fix, the paged editor). `REVIEW_TEMPLATE.md` was untouched by all of it, so the reorder re-applied whole;
+  the NOTES card is appended below the CodeRabbit card rather than merged into it.
+- Known and left alone: the phase 0-4 tables in this review still describe 21 pedals and 2496 expectations, both
+  of which the same 14 commits made stale (24 pedals, 3216 expectations). Rewriting that history is not the same
+  job as fixing the checklist, and a stale record that says when it was written is better than a quietly edited
+  one.
+- Not verified: none of these 21 tests has been run. This edit makes the checklist followable, not passing.
+
+## 2026-11-08 — smoke test of the rebuilt app, and the checklist's "three pedals"
+- Launched `build/PumpBoard_artefacts/Debug/pump BOARD.app` from the shell with output captured. Log:
+  `JUCE v9.0.5`, `pump BOARD: 3 slot(s) published`, `pump BOARD: restored 7 pedal(s), 0 mapping(s)`. Ran ten
+  seconds, no assertion, no error line, quit on SIGTERM, and `current.board` was rewritten on the way out
+  (mtime moved, byte size unchanged at 4226).
+- The 3 and the 7 are not a contradiction and not a bug: `Main.cpp` seeds TUBE, ECHO and SPRING before the
+  window exists so the editor opens on a real pedal, then `MainWindow` restores the file over the top. Both
+  lines are logs of real events, which makes the pair read like a miscount. Left as is — the seed is
+  deliberate — but the checklist now says which number to trust.
+- Fixed in the checklist as a result: test 1 said "three pedals are on the board", which is only true of a
+  first launch. It now says the last saved board's pedals, names the seeded chain as the no-file case, and says
+  `restored N pedal(s)` is the figure that has to match.
+- The saved board is 7 pedals, name empty, 8 macros (the default `MACRO 1..8` bank, every one with no
+  targets), no mappings: `pump.tube` (off), `pump.echo`, `pump.spring`, `pump.swirl`, `pump.tone`,
+  a second `pump.spring`, `pump.twang`. Recorded rather than assumed: my first pass at this card said
+  "no macros" because the file's macro array is not empty — eight default entries are written whether or
+  not anything is assigned, so a reader counting macros from the JSON would have been misled.
+- Not verified: how any of it sounds, and whether the window actually drew correctly — I read the log and the
+  process, I did not look at the screen or hear a pedal.
+
+## 2026-11-08 — handover: what still needs doing, after the first proper look
+- `HANDOVER.md` gained a dated section at the top of the decision lists, because its "state of play" had drifted
+  from the code: the tests bullet still claimed the last run was 6 Nov on Linux, and nothing recorded that the
+  running window had finally been looked at.
+- It now says what is verified (clean 256-target rebuild, one warning found and fixed, 3216 passing, the restored
+  board drawn with its seven pedals and eight macros) and what is not (any sound, any interaction, the quit
+  path) in the same place, so the next person does not have to reconstruct it from `NOTES.md`.
+- Three of the five remaining items are new today and all came from looking rather than reading: the slot load
+  bar crossing the second value line, the LOAD percentage's four decimals, and `--render-slots` drawing three
+  hardcoded pedals instead of the board that restores. None of them is reachable from the test suite, which is
+  the point worth remembering — the suite is green and the app still has visible defects.
+- Not changed: the "Still open" and "Decisions still open" lists, which are still accurate, and the review's
+  phase tables, which are stale on purpose (recorded as item 5).
+- Also corrected while there: the "Where we are" bullet still said phase 5 had begun with CRUSH, SWIRL and
+  COMP. The registry has 24 pedals now, so it names the three most recent (TUNE, VOX, GRUMBLE) and defers the
+  remaining count to `PUMP_DSP_MAP.md` rather than asserting a number I did not check.
+- Not verified: audio, interaction, or that the quit path saves.

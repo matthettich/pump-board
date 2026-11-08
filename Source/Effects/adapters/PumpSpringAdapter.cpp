@@ -1,4 +1,5 @@
 #include "Effects/adapters/PumpSpringAdapter.h"
+#include "Effects/adapters/AssignHelpers.h"
 #include "Effects/adapters/PumpChoices.h"
 #include <cmath>
 #include <cstring>
@@ -59,23 +60,22 @@ void PumpSpringAdapter::setParam (int index, float value) noexcept
 
     switch (index)
     {
-        case kModel:     settings.model   = juce::jlimit (0, pump::spring::kNumModels - 1, (int) std::lround (value)); break;
-        case kDwell:     settings.dwell   = (double) value; break;
-        case kDecay:     settings.decay   = (double) value; break;
-        case kTension:   settings.tension = (double) value; break;
-        case kDrip:      settings.drip    = (double) value; break;
-        case kTone:      settings.tone    = (double) value; break;
-        case kLowCut:    settings.lowCut  = (double) value; break;
-        case kPreDelay:  settings.preDelay = (double) value; break;
-        case kWobble:    settings.wobble  = (double) value; break;
-        case kWidth:     settings.width   = (double) value; break;
-        case kGrit:      settings.grit    = (double) value; break;
-        case kMix:       settings.mix     = (double) value; break;
-        case kOutGain:   settings.outDb   = (double) value; break;
+        case kModel:     assignField (settings.model, juce::jlimit (0, pump::spring::kNumModels - 1, (int) std::lround (value)), dirty); break;
+        case kDwell:     assignField (settings.dwell, (double) value, dirty); break;
+        case kDecay:     assignField (settings.decay, (double) value, dirty); break;
+        case kTension:   assignField (settings.tension, (double) value, dirty); break;
+        case kDrip:      assignField (settings.drip, (double) value, dirty); break;
+        case kTone:      assignField (settings.tone, (double) value, dirty); break;
+        case kLowCut:    assignField (settings.lowCut, (double) value, dirty); break;
+        case kPreDelay:  assignField (settings.preDelay, (double) value, dirty); break;
+        case kWobble:    assignField (settings.wobble, (double) value, dirty); break;
+        case kWidth:     assignField (settings.width, (double) value, dirty); break;
+        case kGrit:      assignField (settings.grit, (double) value, dirty); break;
+        case kMix:       assignField (settings.mix, (double) value, dirty); break;
+        case kOutGain:   assignField (settings.outDb, (double) value, dirty); break;
         default:         return;
     }
 
-    dirty = true;
 }
 
 void PumpSpringAdapter::process (juce::AudioBuffer<float>& buffer) noexcept

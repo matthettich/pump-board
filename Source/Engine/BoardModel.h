@@ -23,7 +23,8 @@ public:
 
     // All of these republish. insert() prepares the new slot with the processor's current rate and block.
     bool insert (int index, const juce::String& typeId);       // false when full or the type is unknown
-    bool replace (int index, const juce::String& typeId);      // keeps the same Slot (and its uid)
+    bool replace (int index, const juce::String& typeId);      // keeps the uid and the on switch (a successor Slot)
+    bool insertEmpty (int index);                              // an empty position, as a loaded board lists it
     // Empties a position: the Slot, its uid and its place stay, the pedal and its params go, so the
     // board does not renumber under the player's feet. False when the position was already empty.
     bool clearSlot (int index);
@@ -31,7 +32,8 @@ public:
     bool move (int from, int to);
     void clear();
 
-    // Re-prepares every slot; call after the device changes sample rate or buffer size.
+    // Re-prepares every slot; call after the device changes sample rate or buffer size. Briefly detaches the chain
+    // (the board plays dry for a couple of blocks) so no slot is re-prepared under the audio thread.
     void prepareAll();
 
 private:

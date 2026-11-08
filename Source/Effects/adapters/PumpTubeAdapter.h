@@ -42,6 +42,16 @@ private:
     // change under a held note shifts everything after this pedal. It is held back until the input has been silent
     // for a couple of blocks — a change between phrases rather than in the middle of one.
     int pendingOversampling = -1;   // -1: nothing waiting
+
+    // The engine reports oversampling as a factor (1, 2, 4, 8); settings and the menu use the index (0..3). Comparing
+    // the two directly (as this adapter did until 7 Nov 2026) never matched, so a switch looked pending every block.
+    int engineOversamplingIndex() const noexcept
+    {
+        int index = 0;
+        while (index < 3 && (1 << index) < engine.oversampling())
+            ++index;
+        return index;
+    }
     int silentBlocks = 0;
     bool prepared = false;
     double preparedRate = 48000.0;

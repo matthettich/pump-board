@@ -15,6 +15,11 @@ bool KeyRouter::keyDown (int keyCode)
     if (isHeld (keyCode))                // auto-repeat: nothing changed, and a Toggle must not flip twice
         return true;
 
+    // A press that cannot be held cannot be released either (keyUp ignores keys it never held), so a momentary
+    // mapping would stick on: with all sixteen held, the extra key is ignored outright.
+    if (numHeld >= kMaxHeldKeys)
+        return false;
+
     addHeld (keyCode);
 
     if (learning)

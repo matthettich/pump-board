@@ -50,8 +50,18 @@ juce::Array<juce::File> PresetManager::list() const
 
 juce::File PresetManager::fileFor (const juce::String& name) const
 {
-    // A typed name must never be able to point outside this folder.
-    return directory.getChildFile (juce::File::createLegalFileName (name.trim()) + ".board");
+    // A typed name must never be able to point outside this folder. createLegalFileName drops illegal characters
+    // rather than replacing them, so a name of nothing but those became ".board" (hidden, and missing from the
+    // program-change list); leading dots would hide a file the same way. Both fall back to a visible name.
+    auto legal = juce::File::createLegalFileName (name.trim()).trim();
+
+    while (legal.startsWithChar ('.'))
+        legal = legal.substring (1).trimStart();
+
+    if (legal.isEmpty())
+        legal = defaultBoardName();
+
+    return directory.getChildFile (legal + ".board");
 }
 
 juce::String PresetManager::nameOf (const juce::File& file) const
@@ -108,7 +118,34 @@ bool PresetManager::rename (const juce::File& file, const juce::String& newName)
     const auto target = fileFor (trimmed);
 
     if (target == file)
-        return true;                                  // nothing to do, and not a failure
+    {
+        if (target.getFileName() == file.getFileName())
+            return true;                              // the very same name: nothing to do, and not a failure
+
+        // Case-only change ("clean" -> "Clean"). On a case-insensitive disk (macOS) the two paths are the same
+        // file, so writing the new one and trashing the old would trash the result. Go through a temporary name.
+        const auto temp = directory.getNonexistentChildFile (".pb-rename", ".tmp", false);
+
+        if (! file.moveFileTo (temp))
+            return false;
+
+        BoardData data;
+        LoadResult result;
+
+        if (read (temp, data, result))
+        {
+            data.name = nameOf (target);
+
+            if (write (target, data))
+            {
+                temp.deleteFile();                    // a scratch copy of what is now in `target`
+                return true;
+            }
+        }
+
+        temp.moveFileTo (file);                       // put the board back where it was
+        return false;
+    }
 
     if (target.existsAsFile())
         return false;                                 // never overwrite another board by accident
@@ -119,10 +156,17 @@ bool PresetManager::rename (const juce::File& file, const juce::String& newName)
     if (! read (file, data, result))
         return false;
 
-    if (saveAs (trimmed, data).getFullPathName().isEmpty())
+    const auto written = saveAs (trimmed, data);
+
+    if (written.getFullPathName().isEmpty())
         return false;
 
-    file.moveToTrash();                               // recoverable, unlike deleteFile
+    if (! trash (file))                               // recoverable, unlike deleteFile
+    {
+        written.deleteFile();                         // the Bin refused: undo, rather than leave two copies
+        return false;
+    }
+
     return true;
 }
 
@@ -131,6 +175,6 @@ bool PresetManager::remove (const juce::File& file) const
     if (! file.existsAsFile())
         return false;
 
-    return file.moveToTrash();
+    return trash (file);
 }
 } // namespace pb

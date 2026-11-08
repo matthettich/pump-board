@@ -1,4 +1,5 @@
 #include "Effects/adapters/PumpToneAdapter.h"
+#include "Effects/adapters/AssignHelpers.h"
 #include <cmath>
 #include <cstring>
 
@@ -53,21 +54,20 @@ void PumpToneAdapter::setParam (int index, float value) noexcept
 
     switch (index)
     {
-        case kRecover:   settings.recover   = juce::jlimit (0.0f, 100.0f, value); break;
-        case kTame:      settings.tame      = juce::jlimit (0.0f, 100.0f, value); break;
-        case kBias:      settings.bias      = juce::jlimit (-100.0f, 100.0f, value); break;
-        case kBrighten:  settings.brighten  = juce::jlimit (-100.0f, 100.0f, value); break;
-        case kBody:      settings.body      = juce::jlimit (-100.0f, 100.0f, value); break;
-        case kSpeed:     settings.speed     = juce::jlimit (0.0f, 100.0f, value); break;
-        case kAutoLevel: settings.autoLevel = value >= 0.5f; break;
-        case kOutGain:   settings.outDb     = juce::jlimit (-12.0f, 12.0f, value); break;
-        case kMix:       settings.mix       = juce::jlimit (0.0f, 100.0f, value); break;
-        case kQuality:   settings.quality   = juce::jlimit (0, 1, (int) std::lround (value)); break;
-        case kDelta:     settings.delta     = value >= 0.5f; break;
+        case kRecover:   assignField (settings.recover, juce::jlimit (0.0f, 100.0f, value), dirty); break;
+        case kTame:      assignField (settings.tame, juce::jlimit (0.0f, 100.0f, value), dirty); break;
+        case kBias:      assignField (settings.bias, juce::jlimit (-100.0f, 100.0f, value), dirty); break;
+        case kBrighten:  assignField (settings.brighten, juce::jlimit (-100.0f, 100.0f, value), dirty); break;
+        case kBody:      assignField (settings.body, juce::jlimit (-100.0f, 100.0f, value), dirty); break;
+        case kSpeed:     assignField (settings.speed, juce::jlimit (0.0f, 100.0f, value), dirty); break;
+        case kAutoLevel: assignField (settings.autoLevel, value >= 0.5f, dirty); break;
+        case kOutGain:   assignField (settings.outDb, juce::jlimit (-12.0f, 12.0f, value), dirty); break;
+        case kMix:       assignField (settings.mix, juce::jlimit (0.0f, 100.0f, value), dirty); break;
+        case kQuality:   assignField (settings.quality, juce::jlimit (0, 1, (int) std::lround (value)), dirty); break;
+        case kDelta:     assignField (settings.delta, value >= 0.5f, dirty); break;
         default:         return;
     }
 
-    dirty = true;
 }
 
 void PumpToneAdapter::process (juce::AudioBuffer<float>& buffer) noexcept

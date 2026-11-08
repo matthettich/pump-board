@@ -1,4 +1,5 @@
 #include "Effects/adapters/PumpCalmAdapter.h"
+#include "Effects/adapters/AssignHelpers.h"
 #include "Effects/adapters/PumpChoices.h"
 #include <cmath>
 #include <cstring>
@@ -57,24 +58,23 @@ void PumpCalmAdapter::setParam (int index, float value) noexcept
 
     switch (index)
     {
-        case kDepth:       settings.depth       = juce::jlimit (0.0f, 100.0f, value); break;
-        case kSharpness:   settings.sharpness   = juce::jlimit (0.0f, 100.0f, value); break;
-        case kSelectivity: settings.selectivity = juce::jlimit (0.0f, 100.0f, value); break;
-        case kAttack:      settings.attackMs    = juce::jlimit (1.0f, 200.0f, value); break;
-        case kRelease:     settings.releaseMs   = juce::jlimit (10.0f, 1000.0f, value); break;
-        case kMode:        settings.mode        = juce::jlimit (0, 1, (int) std::lround (value)); break;
-        case kFocusLow:    settings.focusLo     = juce::jlimit (20.0f, 20000.0f, value); break;
-        case kFocusHigh:   settings.focusHi     = juce::jlimit (20.0f, 20000.0f, value); break;
-        case kStereo:      settings.stereo      = juce::jlimit (0, 2, (int) std::lround (value)); break;
-        case kBalance:     settings.balance     = juce::jlimit (-100.0f, 100.0f, value); break;
-        case kQuality:     settings.quality     = juce::jlimit (0, 3, (int) std::lround (value)); break;
-        case kDelta:       settings.delta       = value >= 0.5f; break;
-        case kMix:         settings.mix         = juce::jlimit (0.0f, 100.0f, value); break;
-        case kTrim:        settings.trimDb      = juce::jlimit (-12.0f, 12.0f, value); break;
+        case kDepth:       assignField (settings.depth, juce::jlimit (0.0f, 100.0f, value), dirty); break;
+        case kSharpness:   assignField (settings.sharpness, juce::jlimit (0.0f, 100.0f, value), dirty); break;
+        case kSelectivity: assignField (settings.selectivity, juce::jlimit (0.0f, 100.0f, value), dirty); break;
+        case kAttack:      assignField (settings.attackMs, juce::jlimit (1.0f, 200.0f, value), dirty); break;
+        case kRelease:     assignField (settings.releaseMs, juce::jlimit (10.0f, 1000.0f, value), dirty); break;
+        case kMode:        assignField (settings.mode, juce::jlimit (0, 1, (int) std::lround (value)), dirty); break;
+        case kFocusLow:    assignField (settings.focusLo, juce::jlimit (20.0f, 20000.0f, value), dirty); break;
+        case kFocusHigh:   assignField (settings.focusHi, juce::jlimit (20.0f, 20000.0f, value), dirty); break;
+        case kStereo:      assignField (settings.stereo, juce::jlimit (0, 2, (int) std::lround (value)), dirty); break;
+        case kBalance:     assignField (settings.balance, juce::jlimit (-100.0f, 100.0f, value), dirty); break;
+        case kQuality:     assignField (settings.quality, juce::jlimit (0, 3, (int) std::lround (value)), dirty); break;
+        case kDelta:       assignField (settings.delta, value >= 0.5f, dirty); break;
+        case kMix:         assignField (settings.mix, juce::jlimit (0.0f, 100.0f, value), dirty); break;
+        case kTrim:        assignField (settings.trimDb, juce::jlimit (-12.0f, 12.0f, value), dirty); break;
         default:           return;
     }
 
-    dirty = true;
 }
 
 void PumpCalmAdapter::process (juce::AudioBuffer<float>& buffer) noexcept

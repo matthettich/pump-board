@@ -203,7 +203,7 @@ public:
             expectEquals (pb::toJson (pb::capture (h.model, h.macros, h.learn, h.registry)), json);
         }
 
-        beginTest ("an unknown pedal leaves an empty position and the mapping after it still finds its pedal");
+        beginTest ("an unknown pedal leaves an empty position and the mapping after it still finds its pedal");   // positions kept since Nov 2026
         {
             Harness h;
 
@@ -225,21 +225,25 @@ public:
             const auto result = pb::apply (data, h.model, h.macros, h.learn, h.registry);
 
             expect (result.ok, result.error);
-            expectEquals (h.model.size(), 2);                     // the empty and the unknown position hold nothing
+            // Review, Nov 2026: positions are kept, as capture() writes them and as the UI's REMOVE leaves them.
+            // The empty and the unknown position are empty slots, not gaps closed up.
+            expectEquals (h.model.size(), 4);
             expect (result.warnings.size() >= 1);
             expectEquals (h.model.at (0)->getEffect()->typeId(), juce::String ("test.gain"));
-            expectEquals (h.model.at (1)->getEffect()->typeId(), juce::String ("test.gain3"));
+            expect (h.model.at (1)->getEffect() == nullptr, "the empty position stays empty");
+            expect (h.model.at (2)->getEffect() == nullptr, "the unknown pedal's position stays, empty");
+            expectEquals (h.model.at (3)->getEffect()->typeId(), juce::String ("test.gain3"));
             expectWithinAbsoluteError (h.registry.get (h.model.at (0)->paramIndices()[0]), 0.5f, 1.0e-6f);
-            expectWithinAbsoluteError (h.registry.get (h.model.at (1)->paramIndices()[0]), 2.5f, 1.0e-6f);
+            expectWithinAbsoluteError (h.registry.get (h.model.at (3)->paramIndices()[0]), 2.5f, 1.0e-6f);
 
-            // "slot/3/gain" was the fourth position in the file; its pedal is now model slot 1.
+            // "slot/3/gain" was the fourth position in the file, and it still is.
             expectEquals ((int) h.learn.mappings().size(), 1);
-            expectEquals (h.learn.mappings()[0].paramIndex, h.model.at (1)->paramIndices()[0]);
+            expectEquals (h.learn.mappings()[0].paramIndex, h.model.at (3)->paramIndices()[0]);
 
-            // Saved again, the target names the position the pedal actually has.
+            // Saved again, the board keeps all four positions and the target is unchanged.
             const auto recaptured = pb::capture (h.model, h.macros, h.learn, h.registry);
-            expectEquals ((int) recaptured.slots.size(), 2);
-            expectEquals (recaptured.mappings[0].target, juce::String ("slot/1/gain"));
+            expectEquals ((int) recaptured.slots.size(), 4);
+            expectEquals (recaptured.mappings[0].target, juce::String ("slot/3/gain"));
         }
 
         beginTest ("a mapping or macro target on a pedal the board does not have is dropped, with a warning");

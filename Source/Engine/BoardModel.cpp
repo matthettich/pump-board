@@ -74,10 +74,15 @@ bool BoardModel::replace (int index, const juce::String& typeId)
         if (descriptor.typeId == typeId)
             category = descriptor.category;
 
-    // Same Slot object: its uid, its switch and its registry ids survive the swap.
-    entries[(size_t) index].slot->setEffect (std::move (effect));
-    entries[(size_t) index].slot->prepare (processor.getSampleRateHz(), processor.getMaxBlock());
-    entries[(size_t) index].category = category;
+    // A successor, not the same Slot: the audio thread may be running the old one this very block, so it must not
+    // be touched. The successor keeps the uid and the on switch; the old slot and its pedal are freed once the
+    // last snapshot holding them is retired.
+    auto& entry = entries[(size_t) index];
+    auto next = entry.slot->makeSuccessor();
+    next->setEffect (std::move (effect));
+    next->prepare (processor.getSampleRateHz(), processor.getMaxBlock());
+    entry.slot = std::move (next);
+    entry.category = category;
 
     publish();
     return true;
@@ -93,8 +98,10 @@ bool BoardModel::clearSlot (int index)
     if (entry.slot->getEffect() == nullptr)
         return false;
 
-    // setEffect(nullptr) unregisters the pedal's params and leaves the slot passing audio untouched.
-    entry.slot->setEffect (nullptr);
+    // A successor with no pedal passes audio untouched; see replace() for why the live slot is left alone.
+    auto next = entry.slot->makeSuccessor();
+    next->prepare (processor.getSampleRateHz(), processor.getMaxBlock());
+    entry.slot = std::move (next);
     entry.category = {};
 
     publish();
@@ -133,8 +140,31 @@ void BoardModel::clear()
 
 void BoardModel::prepareAll()
 {
+    // prepare() reallocates the slot's ring and the pedal's own buffers, so the audio thread must be off these
+    // slots first: take the chain away, wait out the blocks that might still be running it, then put it back.
+    // (Before Nov 2026 this re-prepared the live slots in place.) If the wait times out the device is not calling
+    // back, which is just as safe.
+    processor.detachChain();
+
     for (auto& entry : entries)
         entry.slot->prepare (processor.getSampleRateHz(), processor.getMaxBlock());
+
+    publish();
+}
+
+bool BoardModel::insertEmpty (int index)
+{
+    if ((int) entries.size() >= ChainSnapshot::kMaxSlots)
+        return false;
+
+    auto slot = std::make_shared<Slot> ("s" + juce::String (++uidCounter), registry);
+    slot->prepare (processor.getSampleRateHz(), processor.getMaxBlock());
+
+    index = juce::jlimit (0, (int) entries.size(), index);
+    entries.insert (entries.begin() + index, Entry { slot, {} });
+
+    publish();
+    return true;
 }
 
 void BoardModel::publish()

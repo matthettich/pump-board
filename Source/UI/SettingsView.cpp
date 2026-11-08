@@ -35,7 +35,7 @@ SettingsView::SettingsView (AudioEngine& engineIn)
       // 0..2 inputs so a laptop with no input can still be configured; 2 outputs exactly; MIDI inputs listed.
       selector (engineIn.getDeviceManager(), 0, 2, 2, 2, true, false, true, false)
 {
-    theme.build (accents::machine(), style::isDark());
+    theme.build();
 
     addAndMakeVisible (selector);
     addAndMakeVisible (done);
@@ -54,25 +54,6 @@ SettingsView::SettingsView (AudioEngine& engineIn)
     measure.setTooltip ("Patch an output back into an input with a cable, then press this: the app sends one "
                         "click and times how long it takes to come back.");
     measure.onClick = [this] { startMeasurement(); };
-
-    // Card 5.5: the light skin. Flipping the flag is not enough — every panel builds its palette in its
-    // constructor — so the window rebuilds its content on the next message, never from inside this click.
-    addAndMakeVisible (skin);
-    skin.setColour (juce::TextButton::buttonColourId, theme.panel);
-    skin.setColour (juce::TextButton::textColourOffId, theme.ink);
-    skin.setButtonText (style::isDark() ? "SKIN: DARK" : "SKIN: LIGHT");
-    skin.setTooltip ("Switch the whole app between the dark skin and the light one.");
-    skin.onClick = [this]
-    {
-        style::setDark (! style::isDark());
-        skin.setButtonText (style::isDark() ? "SKIN: DARK" : "SKIN: LIGHT");
-
-        if (onSkinChanged != nullptr)
-        {
-            const auto callback = onSkinChanged;
-            juce::MessageManager::callAsync ([callback] { callback(); });
-        }
-    };
 
     startTimerHz (4);
 }
@@ -186,7 +167,6 @@ void SettingsView::resized()
     auto footer = r.removeFromBottom (44);
     done.setBounds (footer.removeFromRight (96).reduced (0, 6));
     measure.setBounds (footer.removeFromRight (196).reduced (0, 6));
-    skin.setBounds (footer.removeFromRight (124).reduced (0, 6));
 
     selector.setBounds (r);
 }

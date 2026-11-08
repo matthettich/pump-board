@@ -1,4 +1,5 @@
 #include "Effects/adapters/PumpBandAdapter.h"
+#include "Effects/adapters/AssignHelpers.h"
 #include "Effects/adapters/PumpChoices.h"
 #include <cmath>
 #include <cstring>
@@ -79,35 +80,32 @@ void PumpBandAdapter::setParam (int index, float value) noexcept
 
         switch (field)
         {
-            case 0: band.thresh  = juce::jlimit (-60.0f, 0.0f, value); break;
-            case 1: band.ratio   = juce::jlimit (1.0f, 20.0f, value); break;
-            case 2: band.attack  = juce::jlimit (0.1f, 200.0f, value); break;
-            case 3: band.release = juce::jlimit (10.0f, 2000.0f, value); break;
-            case 4: band.makeup  = juce::jlimit (0.0f, 24.0f, value); break;
+            case 0: assignField (band.thresh, juce::jlimit (-60.0f, 0.0f, value), dirty); break;
+            case 1: assignField (band.ratio, juce::jlimit (1.0f, 20.0f, value), dirty); break;
+            case 2: assignField (band.attack, juce::jlimit (0.1f, 200.0f, value), dirty); break;
+            case 3: assignField (band.release, juce::jlimit (10.0f, 2000.0f, value), dirty); break;
+            case 4: assignField (band.makeup, juce::jlimit (0.0f, 24.0f, value), dirty); break;
             default: return;
         }
-
-        dirty = true;
         return;
     }
 
     switch (index)
     {
-        case kOutGain:    settings.outDb       = juce::jlimit (-24.0f, 24.0f, value); break;
-        case kMix:        settings.mix         = juce::jlimit (0.0f, 100.0f, value); break;
-        case kXoverMode:  settings.xoverMode   = juce::jlimit (0, 1, (int) std::lround (value)); break;
-        case kBands:      settings.bands       = juce::jlimit (1, pump::band::kNumBands, (int) std::lround (value)); break;
-        case kXover1:     settings.xover[0]    = juce::jlimit (20.0f, 20000.0f, value); break;
-        case kXover2:     settings.xover[1]    = juce::jlimit (20.0f, 20000.0f, value); break;
-        case kXover3:     settings.xover[2]    = juce::jlimit (20.0f, 20000.0f, value); break;
-        case kLookahead:  settings.lookaheadMs = juce::jlimit (0.0f, 10.0f, value); break;
-        case kDetection:  settings.detection   = juce::jlimit (0, 1, (int) std::lround (value)); break;
-        case kStereoLink: settings.link        = juce::jlimit (0.0f, 100.0f, value); break;
-        case kAutoMakeup: settings.autoMakeup  = value >= 0.5f; break;
+        case kOutGain:    assignField (settings.outDb, juce::jlimit (-24.0f, 24.0f, value), dirty); break;
+        case kMix:        assignField (settings.mix, juce::jlimit (0.0f, 100.0f, value), dirty); break;
+        case kXoverMode:  assignField (settings.xoverMode, juce::jlimit (0, 1, (int) std::lround (value)), dirty); break;
+        case kBands:      assignField (settings.bands, juce::jlimit (1, pump::band::kNumBands, (int) std::lround (value)), dirty); break;
+        case kXover1:     assignField (settings.xover[0], juce::jlimit (20.0f, 20000.0f, value), dirty); break;
+        case kXover2:     assignField (settings.xover[1], juce::jlimit (20.0f, 20000.0f, value), dirty); break;
+        case kXover3:     assignField (settings.xover[2], juce::jlimit (20.0f, 20000.0f, value), dirty); break;
+        case kLookahead:  assignField (settings.lookaheadMs, juce::jlimit (0.0f, 10.0f, value), dirty); break;
+        case kDetection:  assignField (settings.detection, juce::jlimit (0, 1, (int) std::lround (value)), dirty); break;
+        case kStereoLink: assignField (settings.link, juce::jlimit (0.0f, 100.0f, value), dirty); break;
+        case kAutoMakeup: assignField (settings.autoMakeup, value >= 0.5f, dirty); break;
         default:          return;
     }
 
-    dirty = true;
 }
 
 void PumpBandAdapter::process (juce::AudioBuffer<float>& buffer) noexcept

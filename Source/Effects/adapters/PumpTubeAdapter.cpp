@@ -1,4 +1,5 @@
 #include "Effects/adapters/PumpTubeAdapter.h"
+#include "Effects/adapters/AssignHelpers.h"
 #include "Effects/adapters/PumpChoices.h"
 #include <cmath>
 #include <algorithm>
@@ -76,35 +77,40 @@ void PumpTubeAdapter::setParam (int index, float value) noexcept
 
     switch (index)
     {
-        case kMode:         settings.mode         = juce::jlimit (0, pump::tube::kNumModes - 1, (int) std::lround (value)); break;
-        case kDrive:        settings.drive        = (double) value; break;
-        case kBias:         settings.bias         = (double) value; break;
-        case kSag:          settings.sag          = (double) value; break;
-        case kVoltage:      settings.voltage      = (double) value; break;
-        case kStages:       settings.stages       = juce::jlimit (1, 3, (int) std::lround (value)); break;
-        case kFocus:        settings.focus        = juce::jlimit (0, pump::tube::kNumFocus - 1, (int) std::lround (value)); break;
-        case kLowCut:       settings.lowCut       = (double) value; break;
-        case kTone:         settings.tone         = (double) value; break;
-        case kHighCut:      settings.highCut      = (double) value; break;
-        case kMix:          settings.mix          = (double) value; break;
-        case kOutGain:      settings.outDb        = (double) value; break;
-        case kAutoGain:     settings.autoGain     = value >= 0.5f; break;
+        case kMode:         assignField (settings.mode, juce::jlimit (0, pump::tube::kNumModes - 1, (int) std::lround (value)), dirty); break;
+        case kDrive:        assignField (settings.drive, (double) value, dirty); break;
+        case kBias:         assignField (settings.bias, (double) value, dirty); break;
+        case kSag:          assignField (settings.sag, (double) value, dirty); break;
+        case kVoltage:      assignField (settings.voltage, (double) value, dirty); break;
+        case kStages:       assignField (settings.stages, juce::jlimit (1, 3, (int) std::lround (value)), dirty); break;
+        case kFocus:        assignField (settings.focus, juce::jlimit (0, pump::tube::kNumFocus - 1, (int) std::lround (value)), dirty); break;
+        case kLowCut:       assignField (settings.lowCut, (double) value, dirty); break;
+        case kTone:         assignField (settings.tone, (double) value, dirty); break;
+        case kHighCut:      assignField (settings.highCut, (double) value, dirty); break;
+        case kMix:          assignField (settings.mix, (double) value, dirty); break;
+        case kOutGain:      assignField (settings.outDb, (double) value, dirty); break;
+        case kAutoGain:     assignField (settings.autoGain, value >= 0.5f, dirty); break;
         case kOversampling:
         {
             const int requested = juce::jlimit (0, 3, (int) std::lround (value));
+            const bool changed = settings.oversampling != requested;
             settings.oversampling = requested;          // the choice is kept either way, so a save remembers it
 
-            if (prepared && requested != engine.oversampling())
+            if (prepared && requested != engineOversamplingIndex())
+            {
                 pendingOversampling = requested;        // into force at the next silence
+            }
             else
-                dirty = true;
+            {
+                pendingOversampling = -1;               // asked to go back to what the engine already runs: drop a stale request
+                if (changed)
+                    dirty = true;
+            }
 
             return;                                     // not an ordinary dirty flag: see below
         }
         default:            return;
     }
-
-    dirty = true;
 }
 
 void PumpTubeAdapter::process (juce::AudioBuffer<float>& buffer) noexcept
@@ -134,7 +140,15 @@ void PumpTubeAdapter::process (juce::AudioBuffer<float>& buffer) noexcept
 
     if (dirty)
     {
-        engine.setSettings (settings);   // block start, as pump's engine expects
+        // A waiting oversampling change stays out of ordinary pushes: a DRIVE turn mid-note must not carry it into
+        // the engine early (its latency would jump while playing). The engine keeps what it runs until the silence
+        // above lets the request through (CodeRabbit, PR #1).
+        auto pushed = settings;
+
+        if (pendingOversampling >= 0)
+            pushed.oversampling = engineOversamplingIndex();
+
+        engine.setSettings (pushed);     // block start, as pump's engine expects
         dirty = false;
     }
 

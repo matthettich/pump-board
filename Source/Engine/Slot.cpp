@@ -1,4 +1,5 @@
 #include "Engine/Slot.h"
+#include "Common/Sanitize.h"
 #include "Engine/LoadMeter.h"
 #include <cmath>
 
@@ -41,6 +42,10 @@ Slot::Slot (juce::String uidIn, ParameterRegistry& registryIn)
 Slot::~Slot()
 {
     load::unregisterSlot (this);
+
+    if (! ownsRegistrations)
+        return;                                   // a successor took the switch; the params were released then
+
     for (const int index : indices)
         if (index != ParameterRegistry::kInvalid)
             registry.remove (index);
@@ -68,11 +73,43 @@ void Slot::setEffect (EffectPtr newEffect)
         indices.push_back (registry.add (entryFor ("slot/" + uid + "/" + info.id, info)));
 }
 
+std::shared_ptr<Slot> Slot::makeSuccessor()
+{
+    jassert (ownsRegistrations);   // a slot hands over once
+
+    // The pedal's params are released now, not when this slot dies: the registry hands back an existing index
+    // for an id it already knows, so the successor's "slot/<uid>/<param>" ids must be free before it registers
+    // them. `indices` itself is left alone (the audio thread may still be walking it this block); for the one or
+    // two blocks this slot keeps running, its pedal just reads the freed values.
+    for (const int index : indices)
+        if (index != ParameterRegistry::kInvalid)
+            registry.remove (index);
+
+    ownsRegistrations = false;
+
+    // Built without the constructor's switch registration: the successor adopts this slot's switch.
+    return std::shared_ptr<Slot> (new Slot (*this, AdoptSwitch{}));
+}
+
+Slot::Slot (const Slot& previous, AdoptSwitch)
+    : uid (previous.uid), registry (previous.registry), onIndex (previous.onIndex)
+{
+    load::registerSlot (this);
+}
+
+int Slot::maxDelayFor (double sampleRate) noexcept
+{
+    const double rate = sampleRate > 0.0 ? sampleRate : 48000.0;
+    return juce::jmax (kMaxDelaySamples, (int) std::ceil (0.35 * rate));
+}
+
 void Slot::prepare (double sampleRate, int maxBlockSize)
 {
-    dryBuffer.setSize (2, juce::jmax (1, maxBlockSize) + kMaxDelaySamples, false, true, false);
+    maxDelay = maxDelayFor (sampleRate);
+    dryBuffer.setSize (2, juce::jmax (1, maxBlockSize) + maxDelay, false, true, false);
     dryBuffer.clear();
     dryWritePos = 0;
+    preparedBlock = juce::jmax (1, maxBlockSize);
 
     wetGain.reset (sampleRate, kCrossfadeSeconds);
 
@@ -95,7 +132,9 @@ void Slot::process (juce::AudioBuffer<float>& buffer) noexcept
 
     const int ringSize = dryBuffer.getNumSamples();
 
-    if (numSamples <= 0 || numChannels <= 0 || numSamples > ringSize)
+    // A block bigger than the one the pedal was prepared for (the device grew its buffer and the board has not
+    // been re-prepared yet) passes dry rather than overrunning the pedal's buffers.
+    if (numSamples <= 0 || numChannels <= 0 || numSamples > ringSize || numSamples > preparedBlock)
         return;
 
     // 1. push the targets. The effect smooths its own parameters.
@@ -106,14 +145,10 @@ void Slot::process (juce::AudioBuffer<float>& buffer) noexcept
     const bool wantOn = onIndex != ParameterRegistry::kInvalid && registry.get (onIndex) >= 0.5f;
     wetGain.setTargetValue (wantOn ? 1.0f : 0.0f);
 
-    // 2. fully bypassed and settled: skip the effect entirely (card 2.1's v1 rule, tails stop with it)
-    if (! wantOn && ! wetGain.isSmoothing() && wetGain.getCurrentValue() <= 0.0f)
-        return;
-
-    // 3. the dry signal, taken before the effect touches the buffer, into the delay ring. Card 5.4: it is read
+    // 2. the dry signal, taken before the effect touches the buffer, into the delay ring. Card 5.4: it is read
     //    back `latency` frames later, so a pedal that reports latency (TUBE, CRUSH, SWIRL, COMP) does not comb
     //    the crossfade when its slot is switched off.
-    const int latency = juce::jlimit (0, kMaxDelaySamples, effect->latencySamples());
+    const int latency = juce::jlimit (0, maxDelay, effect->latencySamples());
 
     for (int ch = 0; ch < numChannels; ++ch)
     {
@@ -128,11 +163,37 @@ void Slot::process (juce::AudioBuffer<float>& buffer) noexcept
 
     dryWritePos = (dryWritePos + numSamples) % ringSize;
 
+    // 3. fully bypassed and settled: skip the effect (card 2.1's v1 rule) but keep its latency. The output is the
+    //    dry ring read `latency` frames back, so switching a latency-reporting pedal off no longer jumps the signal
+    //    by that many samples (a click as the fade settled), the board's latency total stays true whatever is on,
+    //    and the ring is current when the pedal comes back (review, Nov 2026).
+    if (! wantOn && ! wetGain.isSmoothing() && wetGain.getCurrentValue() <= 0.0f)
+    {
+        const int readFrom = ((dryWritePos - numSamples - latency) % ringSize + ringSize) % ringSize;
+
+        for (int ch = 0; ch < numChannels; ++ch)
+        {
+            const auto* src = dryBuffer.getReadPointer (ch);
+            auto* out = buffer.getWritePointer (ch);
+            const int first = juce::jmin (numSamples, ringSize - readFrom);
+
+            juce::FloatVectorOperations::copy (out, src + readFrom, first);
+
+            if (first < numSamples)
+                juce::FloatVectorOperations::copy (out + first, src, numSamples - first);
+        }
+
+        return;
+    }
+
     // 4. the effect, in place — timed for the CPU bar (card 5.24). Two clock reads, no allocation.
     const auto startedTicks = juce::Time::getHighResolutionTicks();
     effect->process (buffer);
     load::publish (this, juce::Time::highResolutionTicksToSeconds (juce::Time::getHighResolutionTicks() - startedTicks),
                    numSamples);
+
+    // A pedal that blew up must not take the pedals after it down too: its NaNs stop here (Common/Sanitize.h).
+    scrubNonFinite (buffer, numChannels, numSamples);
 
     // 5. equal-power crossfade, 10 ms, against the delayed dry
     // (dryWritePos has already advanced past this block, so the block's own first sample sits at -numSamples)

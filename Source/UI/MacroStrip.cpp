@@ -36,7 +36,7 @@ MacroStrip::MacroStrip (MacroBank& bankIn, ParameterRegistry& registryIn,
                         std::function<juce::String (int paramIndex)> labelIn)
     : bank (bankIn), registry (registryIn), labelForParam (std::move (labelIn))
 {
-    theme.build (accents::machine(), style::isDark());
+    theme.build();
     dialLookAndFeel = std::make_unique<PumpDialLookAndFeel> (theme);
 
     for (int i = 0; i < MacroBank::kNumMacros; ++i)
@@ -136,7 +136,24 @@ void MacroStrip::timerCallback()
             dials[(size_t) i]->setValue (value, juce::dontSendNotification);
     }
 
-    repaint();                                        // the target counts and names change under us
+    // The target counts and names change under us (a map, a rename, a load). Open item 4: repaint only if they did.
+    bool changed = false;
+
+    for (int i = 0; i < MacroBank::kNumMacros; ++i)
+    {
+        const auto name = bank.getName (i);
+        const auto targets = (int) bank.getTargets (i).size();
+
+        if (targets != shownTargets[(size_t) i] || name != shownNames[(size_t) i])
+        {
+            shownTargets[(size_t) i] = targets;
+            shownNames[(size_t) i] = name;
+            changed = true;
+        }
+    }
+
+    if (changed)
+        repaint();
 }
 
 void MacroStrip::showMenu (int macro)

@@ -40,6 +40,9 @@ set(PUMP_DSP_SOURCES
     ${CMAKE_SOURCE_DIR}/external/pump/plugins/coil/CoilEngine.hpp
     ${CMAKE_SOURCE_DIR}/external/pump/plugins/coil/CoilDsp.hpp
     ${CMAKE_SOURCE_DIR}/external/pump/plugins/coil/CoilParams.hpp
+    ${CMAKE_SOURCE_DIR}/external/pump/plugins/tune/TuneEngine.hpp
+    ${CMAKE_SOURCE_DIR}/external/pump/plugins/vox/VoxEngine.hpp
+    ${CMAKE_SOURCE_DIR}/external/pump/plugins/grumble/GrumbleEngine.hpp
     # HEAT's linear-phase splitter goes through pump's RealFFT, which is pffft; every plugin ships its own copy
     # of this one C file (card 5.7). One is enough for the whole app.
     ${CMAKE_SOURCE_DIR}/external/pump/plugins/heat/pffft.c)
@@ -65,7 +68,10 @@ set(PUMP_DSP_INCLUDES
     ${CMAKE_SOURCE_DIR}/external/pump/plugins/wide
     ${CMAKE_SOURCE_DIR}/external/pump/plugins/band
     ${CMAKE_SOURCE_DIR}/external/pump/plugins/eq
-    ${CMAKE_SOURCE_DIR}/external/pump/plugins/coil)
+    ${CMAKE_SOURCE_DIR}/external/pump/plugins/coil
+    ${CMAKE_SOURCE_DIR}/external/pump/plugins/tune
+    ${CMAKE_SOURCE_DIR}/external/pump/plugins/vox
+    ${CMAKE_SOURCE_DIR}/external/pump/plugins/grumble)
 
 file(GLOB_RECURSE PB_CORE_SOURCES CONFIGURE_DEPENDS
     Source/Common/*.cpp
@@ -93,11 +99,10 @@ target_compile_definitions(PumpBoardCore PUBLIC
     $<$<CONFIG:Debug>:PB_ALLOCATION_GUARD=1>)
 
 # ---- Fonts (card 5.27) ----
-# pump's two SIL OFL faces, compiled into the app so it no longer depends on the source tree at runtime and renders
+# JetBrains Mono (SIL OFL), the IDM skin's only face, compiled into the app so it no longer depends on the source tree at runtime and renders
 # identically on a machine that has neither font installed. The licence texts ride along in the bundle's Resources.
 juce_add_binary_data(PumpBoardFonts
     SOURCES
-        external/pump/common/fonts/ShareTechMono-Regular.ttf
         external/pump/common/fonts/JetBrainsMono-Regular.ttf
         external/pump/common/fonts/JetBrainsMono-Bold.ttf
     HEADER_NAME FontData.h
@@ -108,6 +113,7 @@ juce_add_gui_app(PumpBoard
     PRODUCT_NAME "pump BOARD"
     COMPANY_NAME "wake"
     BUNDLE_ID "xyz.matthettich.pumpboard"
+    ICON_BIG "${CMAKE_SOURCE_DIR}/Resources/icon-1024.png"   # one compact pedal in the IDM pink & green skin; source Resources/icon.svg
     MICROPHONE_PERMISSION_ENABLED TRUE
     MICROPHONE_PERMISSION_TEXT "pump BOARD needs audio input to process your instrument.")
 
@@ -116,7 +122,6 @@ target_sources(PumpBoard PRIVATE ${PB_APP_SOURCES})
 target_link_libraries(PumpBoard PRIVATE PumpBoardCore PumpBoardFonts juce::juce_gui_extra)
 
 set(PB_FONT_LICENCES
-    ${CMAKE_SOURCE_DIR}/external/pump/common/fonts/OFL-ShareTechMono.txt
     ${CMAKE_SOURCE_DIR}/external/pump/common/fonts/OFL-JetBrainsMono.txt)
 set_source_files_properties(${PB_FONT_LICENCES} PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
 target_sources(PumpBoard PRIVATE ${PB_FONT_LICENCES})

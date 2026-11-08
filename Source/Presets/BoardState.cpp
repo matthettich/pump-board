@@ -278,6 +278,9 @@ LoadResult apply (const BoardData& data, BoardModel& model, MacroBank& macros, L
 {
     LoadResult result;
 
+    // The old mappings go first: model.clear() frees every pedal's params and the new board reuses those indices,
+    // so a CC arriving mid-load must not find the old table aimed at them.
+    learn.setMappings ({});
     model.clear();
 
     const int slotCount = juce::jmin ((int) data.slots.size(), ChainSnapshot::kMaxSlots);
@@ -295,8 +298,11 @@ LoadResult apply (const BoardData& data, BoardModel& model, MacroBank& macros, L
     {
         const auto& slotData = data.slots[(size_t) i];
 
+        // An empty position stays a position: a board saved as [DRIVE, -, ECHO] must not reload as [DRIVE, ECHO]
+        // (review, Nov 2026 — removing a pedal deliberately leaves its slot empty, and this used to close the gap).
         if (slotData.typeId.isEmpty())
         {
+            model.insertEmpty (model.size());
             slotUids.push_back ({});
             continue;
         }
@@ -304,6 +310,7 @@ LoadResult apply (const BoardData& data, BoardModel& model, MacroBank& macros, L
         if (! model.insert (model.size(), slotData.typeId))
         {
             result.warnings.add (slotName (i) + ": unknown effect '" + slotData.typeId + "', left empty");
+            model.insertEmpty (model.size());
             slotUids.push_back ({});
             continue;
         }

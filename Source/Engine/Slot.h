@@ -2,6 +2,7 @@
 // SCAFFOLD — fixed interface. Do not change without review.
 #include "Effects/IEffect.h"
 #include "Control/ParameterRegistry.h"
+#include <memory>
 #include <vector>
 
 namespace pb
@@ -19,6 +20,13 @@ public:
     // Message thread, BEFORE the slot is in a published snapshot.
     // Registers "slot/<uid>/<paramId>" for each effect param, plus "slot/<uid>/on".
     void setEffect (EffectPtr newEffect);
+
+    // Message thread. A fresh Slot that takes over this one's uid and "on" switch (same registry index, so a
+    // mapping or macro aimed at the switch keeps working). BoardModel publishes it in this slot's place instead
+    // of calling setEffect()/prepare() on a slot the audio thread may be running (review, Nov 2026: replace,
+    // clear and a device change used to free the old pedal mid-block). This slot keeps its pedal until the last
+    // snapshot holding it is retired; its destructor then leaves the switch alone.
+    std::shared_ptr<Slot> makeSuccessor();
     IEffect* getEffect() const noexcept { return effect.get(); }
 
     void prepare (double sampleRate, int maxBlockSize);
@@ -33,16 +41,28 @@ public:
     int onParamIndex() const noexcept { return onIndex; }
     const std::vector<int>& paramIndices() const noexcept { return indices; }
 
+    // The deepest latency (frames) a slot's dry ring compensates at this sample rate: ceil(0.35 s), at least 8192.
+    static int maxDelayFor (double sampleRate) noexcept;
+    int getMaxDelay() const noexcept { return maxDelay; }
+
 private:
+    struct AdoptSwitch {};
+    Slot (const Slot& previous, AdoptSwitch);   // makeSuccessor() only
+
     juce::String uid;
     ParameterRegistry& registry;
     EffectPtr effect;
     std::vector<int> indices;                 // registry index per effect param (message thread builds it)
     int onIndex = ParameterRegistry::kInvalid;
+    bool ownsRegistrations = true;            // message thread only: false once a successor took the switch
+    int preparedBlock = 0;                    // process() refuses bigger blocks than the pedal was prepared for
     // Card 5.4: the dry copy is a delay ring, so the on/off crossfade compares dry and wet at the same point in
     // time even when the effect reports latency. 8192 frames is 170 ms at 48k — more than the deepest pedal.
     // (A ring needs a position, which is why this scaffold header gained one int; see NOTES.md, card 5.4.)
+    // Open item 3: since 6 Nov the ring is sized from the sample rate in prepare() (ceil(0.35 s), never below
+    // this floor) so a pedal that reports a long latency at 96 kHz is not clamped.
     static constexpr int kMaxDelaySamples = 8192;
+    int maxDelay = kMaxDelaySamples;          // set by prepare(); audio thread reads it, never writes
     juce::AudioBuffer<float> dryBuffer;       // sized in prepare(): one block plus the delay ring
     int dryWritePos = 0;                      // audio thread only
     juce::SmoothedValue<float> wetGain;       // 0 = bypassed, 1 = on

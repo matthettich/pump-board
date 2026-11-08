@@ -14,6 +14,7 @@
 #include "UI/SettingsView.h"
 #include "UI/SlotView.h"
 #include "UI/TempoField.h"
+#include <cstdint>
 #include <algorithm>
 
 namespace pb
@@ -39,7 +40,7 @@ public:
           macroStrip (macros, registryIn, [this] (int paramIndex) { return labelForParam (paramIndex); }),
           presetManager (PresetManager::forApp())
     {
-        theme.build (style::accents::machine(), style::isDark());   // the window's own chrome, not a pedal's accent
+        theme.build();   // the window's own chrome, not a pedal's accent
 
         setWantsKeyboardFocus (true);     // an unmapped key still reaches keyPressed, and nothing else wants it
 
@@ -161,12 +162,7 @@ public:
         saveWorkingBoard();
     }
 
-    // Card 5.5: the Settings overlay flips the skin. The window owns the rebuild, because every panel here
-    // builds its palette in its constructor.
-    std::function<void()> onSkinChanged;
-
-    // The strip behind the side buttons is the one area no panel covers, so it painted the window's default
-    // background in both skins: dark under the light palette. Fill it with the same palette the board uses.
+    // The strip behind the side buttons is the one area no panel covers: fill it with the board's paper.
     void paint (juce::Graphics& g) override
     {
         g.fillAll (theme.bg);
@@ -228,6 +224,16 @@ public:
             return true;
         }
 
+        // Esc also abandons a macro's "Add target": otherwise the next knob clicked, whenever that is, silently
+        // opens a target dialog instead of doing what the click meant.
+        if (key.getKeyCode() == juce::KeyPress::escapeKey && editor.isPickingTarget())
+        {
+            editor.setPickTargetMode (false);
+            macroStrip.cancelPick();
+            showTransient ("ADD TARGET CANCELLED");
+            return true;
+        }
+
         return keys.keyDown (key.getKeyCode());
     }
 
@@ -270,7 +276,7 @@ private:
             model.prepareAll();
         }
 
-        syncSlots();
+        syncSlots (false);                  // the per-tick pass: skipped unless a value or the model moved
         updateBypassLight();
 
         const auto now = juce::Time::currentTimeMillis();
@@ -284,6 +290,10 @@ private:
 
             if (boardBypassIndex != ParameterRegistry::kInvalid)
                 registry.set (boardBypassIndex, 0.0f);
+
+            // Unbypassing moves the change counter; that is the load finishing, not an edit, so the board must not
+            // come up starred and be written straight back out.
+            lastSeenCounter = registry.changeCounter();
 
             updateBypassLight();
         }
@@ -307,9 +317,34 @@ private:
             updateStatus();
     }
 
-    void syncSlots()
+    // Rebuilds every pedal's text (it copies each pedal's params(), Strings and all, for up to sixteen slots).
+    // The 30 Hz tick passes force = false and then only does the work when something it shows could have changed:
+    // a registry write moved changeCounter() (the on switch and every silk-screened value live there), or the
+    // chain itself differs (count, a slot, a pedal - a swap, insert or remove that no explicit caller announced).
+    // Every place that edits the model calls this with the default and so always refreshes.
+    void syncSlots (bool force = true)
     {
         const int count = model.size();
+
+        uint64_t signature = UINT64_C (1469598103934665603) ^ (uint64_t) count;       // FNV-1a over the chain's identity
+
+        for (int i = 0; i < count; ++i)
+        {
+            const auto* slot = model.at (i);
+            const auto* effect = slot != nullptr ? slot->getEffect() : nullptr;
+
+            for (const auto pointer : { (uintptr_t) slot, (uintptr_t) effect })
+                signature = (signature ^ (uint64_t) pointer) * UINT64_C (1099511628211);
+        }
+
+        const auto counterNow = registry.changeCounter();
+
+        if (! force && syncValid && counterNow == lastSyncCounter && signature == lastSyncSignature)
+            return;
+
+        syncValid = true;
+        lastSyncCounter = counterNow;
+        lastSyncSignature = signature;
 
         for (int i = 0; i < count; ++i)
         {
@@ -416,6 +451,48 @@ private:
     // Taking a pedal off empties its position instead of closing the gap. Two reasons: the empty "+" is where the
     // next pedal goes, and renumbering the board under the player's feet (and under every macro and mapping that
     // names a slot) is a worse surprise than an empty slot.
+    // A pedal that goes (removed or swapped) takes its params with it, and the registry reuses freed indices: a
+    // footswitch or macro still aimed at one would quietly start driving whatever pedal lands there next
+    // (review, Nov 2026). The slot's own on switch survives a swap, so mappings to it are kept.
+    void forgetPedalParams (int index)
+    {
+        auto* slot = model.at (index);
+
+        if (slot == nullptr)
+            return;
+
+        // An armed or pending learn may be aimed at one of the indices about to be freed and reused: cancel it, or the
+        // next MIDI message would commit a mapping onto whatever pedal takes that index (CodeRabbit, PR #1).
+        if (learn.isLearning() || learn.hasPendingSource())
+        {
+            learn.cancelLearn();
+            editor.setLearnTarget (ParameterRegistry::kInvalid);
+        }
+
+        const auto& gone = slot->paramIndices();
+        const auto isGone = [&gone] (int paramIndex)
+        {
+            return paramIndex != ParameterRegistry::kInvalid
+                && std::find (gone.begin(), gone.end(), paramIndex) != gone.end();
+        };
+
+        for (int i = (int) learn.mappings().size(); --i >= 0;)
+            if (isGone (learn.mappings()[(size_t) i].paramIndex))
+                learn.removeMapping (i);
+
+        for (int m = 0; m < MacroBank::kNumMacros; ++m)
+        {
+            auto targets = macros.getTargets (m);
+            const auto before = targets.size();
+            targets.erase (std::remove_if (targets.begin(), targets.end(),
+                                           [&isGone] (const MacroBank::Target& t) { return isGone (t.paramIndex); }),
+                           targets.end());
+
+            if (targets.size() != before)
+                macros.setTargets (m, std::move (targets));
+        }
+    }
+
     void removeSlotEffect (int index)
     {
         auto* slot = model.at (index);
@@ -424,6 +501,8 @@ private:
             return;
 
         const auto name = slot->getEffect()->displayName();
+
+        forgetPedalParams (index);
 
         if (! model.clearSlot (index))
             return;
@@ -475,8 +554,13 @@ private:
             if (auto* view = slotViews[(size_t) index].get())
                 anchor = view;
 
+        // SafePointer: the menu can outlive this component (a quit with it open).
         menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (anchor),
-                            [this, index, typeIds] (int result) { applySlotMenu (index, result, typeIds); });
+                            [safe = juce::Component::SafePointer<MainContent> (this), index, typeIds] (int result)
+                            {
+                                if (safe != nullptr)
+                                    safe->applySlotMenu (index, result, typeIds);
+                            });
     }
 
     void applySlotMenu (int index, int result, const std::vector<juce::String>& typeIds)
@@ -501,9 +585,23 @@ private:
             const auto typeId = typeIds[(size_t) result - 1];
 
             if (model.at (index) != nullptr)
+            {
+                forgetPedalParams (index);
                 model.replace (index, typeId);      // same slot, new pedal: the old values go with the old pedal
+            }
             else
-                model.insert (index, typeId);
+            {
+                // A "+" past the last pedal fills the next position, not the one clicked (the model has no gaps
+                // to skip); select where it actually went rather than the still-empty slot that was clicked.
+                const int target = juce::jmin (index, model.size());
+
+                if (model.insert (target, typeId))
+                {
+                    syncSlots();
+                    selectSlot (target);
+                    return;
+                }
+            }
         }
 
         syncSlots();
@@ -634,7 +732,11 @@ private:
         menu.addItem (kSaveAsItem, "SAVE THIS BOARD AS...");
 
         menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&presetsButton),
-                            [this, files] (int result) { applyPresetMenu (result, files); });
+                            [safe = juce::Component::SafePointer<MainContent> (this), files] (int result)
+                            {
+                                if (safe != nullptr)
+                                    safe->applyPresetMenu (result, files);
+                            });
     }
 
     void applyPresetMenu (int result, const juce::Array<juce::File>& files)
@@ -903,8 +1005,11 @@ private:
         menu.addItem (kMapValue, "Value", true, preferred == ActionType::SetValue);
 
         menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&editor),
-                            [this, param] (int result)
+                            [this, safe = juce::Component::SafePointer<MainContent> (this), param] (int result)
         {
+            if (safe == nullptr)
+                return;                       // the window went while the menu was open
+
             switch (result)
             {
                 case kMapToggle:    learn.commitPending (ActionType::Toggle);      break;
@@ -983,8 +1088,12 @@ private:
         window->addButton ("Save", 1, juce::KeyPress (juce::KeyPress::returnKey));
         window->addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));
 
-        window->enterModalState (true, juce::ModalCallbackFunction::create ([this, window] (int result)
+        window->enterModalState (true, juce::ModalCallbackFunction::create (
+            [this, safe = juce::Component::SafePointer<MainContent> (this), window] (int result)
         {
+            if (safe == nullptr)
+                return;
+
             if (result != 1)
                 return;
 
@@ -1075,6 +1184,15 @@ private:
     // bypassed, and the swap itself never lands on a live chain.
     void beginSwap (std::function<void()> swap)
     {
+        // A load already waiting on the fade: the newest one replaces it (two quick program changes, or > > on the
+        // header). Without this the second ran at once — the board read as bypassed, by us — and the first then
+        // landed on top of it 25 ms later.
+        if (pendingSwap != nullptr)
+        {
+            pendingSwap = std::move (swap);
+            return;
+        }
+
         if (boardBypassIndex == ParameterRegistry::kInvalid || registry.get (boardBypassIndex) >= 0.5f)
         {
             swap();
@@ -1172,12 +1290,6 @@ private:
                     settingsView->setVisible (false);
             };
 
-            settingsView->onSkinChanged = [this]
-            {
-                if (onSkinChanged != nullptr)
-                    onSkinChanged();
-            };
-
             addAndMakeVisible (*settingsView);
             settingsView->setBounds (getLocalBounds());
         }
@@ -1238,6 +1350,9 @@ private:
     int lastBlock = 0;
     int ticks = 0;
     int paintedCount = 0;
+    bool syncValid = false;                 // syncSlots() has run at least once
+    uint32_t lastSyncCounter = 0;           // registry.changeCounter() at the last syncSlots()
+    uint64_t lastSyncSignature = 0;         // identity of the chain at the last syncSlots()
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainContent)
 };
@@ -1245,7 +1360,7 @@ private:
 
 MainWindow::MainWindow (AudioEngine& engineIn, BoardProcessor& processorIn, ParameterRegistry& registryIn,
                         BoardModel& modelIn, MidiRouter& routerIn)
-    : juce::DocumentWindow ("pump BOARD", juce::Colour (0xff141418), juce::DocumentWindow::allButtons),
+    : juce::DocumentWindow ("pump BOARD", style::idm::paper(), juce::DocumentWindow::allButtons),
       engine (engineIn),
       processor (processorIn),
       registry (registryIn),
@@ -1254,7 +1369,7 @@ MainWindow::MainWindow (AudioEngine& engineIn, BoardProcessor& processorIn, Para
 {
     setUsingNativeTitleBar (true);
     setResizable (true, false);
-    setResizeLimits (900, 600, 4096, 3072);
+    setResizeLimits (1300, 700, 4096, 3072);   // the board's fixed layout: 16 slots in two rows of 8, plus the side column
     buildContent();
     centreWithSize (1300, 720);
     setVisible (true);
@@ -1267,10 +1382,6 @@ void MainWindow::buildContent()
 {
     auto* content = new MainContent (engine, processor, registry, model, router);
 
-    // Card 5.5: a skin change rebuilds the content, because every panel builds its palette in its constructor.
-    // The rebuild is asked for on the message queue, so it can never delete the button that asked for it.
-    content->onSkinChanged = [this] { rebuildContent(); };
-
     setContentOwned (content, false);
 
     // Only when the window is already on screen: grabbing focus before that trips JUCE's own assertion. At
@@ -1278,13 +1389,6 @@ void MainWindow::buildContent()
     if (isShowing())
         if (auto* c = getContentComponent())
             c->grabKeyboardFocus();
-}
-
-void MainWindow::rebuildContent()
-{
-    const auto bounds = getBounds();
-    buildContent();
-    setBounds (bounds);                   // stay where the player put the window
 }
 
 MainWindow::~MainWindow()

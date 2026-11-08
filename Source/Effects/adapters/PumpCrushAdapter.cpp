@@ -1,4 +1,5 @@
 #include "Effects/adapters/PumpCrushAdapter.h"
+#include "Effects/adapters/AssignHelpers.h"
 #include "Effects/adapters/PumpChoices.h"
 #include <cmath>
 #include <cstring>
@@ -63,26 +64,25 @@ void PumpCrushAdapter::setParam (int index, float value) noexcept
 
     switch (index)
     {
-        case kMode:     settings.mode    = juce::jlimit (0, pump::crush::kNumModes - 1, (int) std::lround (value)); break;
-        case kDrive:    settings.drive   = (double) value; break;
-        case kBits:     settings.bits    = (double) value; break;
-        case kRate:     settings.rate    = (double) value; break;
-        case kJitter:   settings.jitter  = (double) value; break;
-        case kOrder:    settings.order   = juce::jlimit (0, pump::crush::kNumOrders - 1, (int) std::lround (value)); break;
-        case kWow:      settings.wow     = (double) value; break;
-        case kFlutter:  settings.flutter = (double) value; break;
-        case kHiss:     settings.hiss    = (double) value; break;
-        case kCrackle:  settings.crackle = (double) value; break;
-        case kDropout:  settings.dropout = (double) value; break;
-        case kAge:      settings.age     = (double) value; break;
-        case kLowCut:   settings.lowCut  = (double) value; break;
-        case kHighCut:  settings.highCut = (double) value; break;
-        case kMix:      settings.mix     = (double) value; break;
-        case kOutGain:  settings.outDb   = (double) value; break;
+        case kMode:     assignField (settings.mode, juce::jlimit (0, pump::crush::kNumModes - 1, (int) std::lround (value)), dirty); break;
+        case kDrive:    assignField (settings.drive, (double) value, dirty); break;
+        case kBits:     assignField (settings.bits, (double) value, dirty); break;
+        case kRate:     assignField (settings.rate, (double) value, dirty); break;
+        case kJitter:   assignField (settings.jitter, (double) value, dirty); break;
+        case kOrder:    assignField (settings.order, juce::jlimit (0, pump::crush::kNumOrders - 1, (int) std::lround (value)), dirty); break;
+        case kWow:      assignField (settings.wow, (double) value, dirty); break;
+        case kFlutter:  assignField (settings.flutter, (double) value, dirty); break;
+        case kHiss:     assignField (settings.hiss, (double) value, dirty); break;
+        case kCrackle:  assignField (settings.crackle, (double) value, dirty); break;
+        case kDropout:  assignField (settings.dropout, (double) value, dirty); break;
+        case kAge:      assignField (settings.age, (double) value, dirty); break;
+        case kLowCut:   assignField (settings.lowCut, (double) value, dirty); break;
+        case kHighCut:  assignField (settings.highCut, (double) value, dirty); break;
+        case kMix:      assignField (settings.mix, (double) value, dirty); break;
+        case kOutGain:  assignField (settings.outDb, (double) value, dirty); break;
         default:        return;
     }
 
-    dirty = true;
 }
 
 void PumpCrushAdapter::process (juce::AudioBuffer<float>& buffer) noexcept

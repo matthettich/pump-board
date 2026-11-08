@@ -22,6 +22,7 @@ public:
 
     // The pedal editor reports the control the user clicked while a macro was waiting for one.
     void addPickedTarget (int paramIndex);
+    void cancelPick() { pendingMacro = -1; repaint(); }      // Esc, or the pick abandoned another way
 
     std::function<void (int macro)> onPickRequested;          // the window arms the editor
     std::function<void (const juce::String&)> onMessage;     // the status line
@@ -40,6 +41,8 @@ private:
     std::unique_ptr<juce::LookAndFeel> dialLookAndFeel;       // before the dials it dresses
     std::array<std::unique_ptr<juce::Slider>, MacroBank::kNumMacros> dials;
     int pendingMacro = -1;                                   // waiting for a control to be picked
+    std::array<int, MacroBank::kNumMacros> shownTargets {};   // what paint() last drew (open item 4)
+    std::array<juce::String, MacroBank::kNumMacros> shownNames {};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MacroStrip)
 };

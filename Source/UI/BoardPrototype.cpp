@@ -25,10 +25,8 @@ namespace
 
 BoardPrototype::BoardPrototype()
 {
-    // The board's own chrome is neutral (pump MASTER's grey); the slots carry the neon.
-    // Card 5.5: the skin is a global choice made in Settings, not this widget's own flag.
-    dark = style::isDark();
-    theme.build (accents::machine(), dark);
+    // One skin (IDM pink & green): the palette is the same everywhere, so there is nothing to choose here.
+    theme.build();
 
     selected = 0;                     // slot one is the one that exists (card 2.2)
 
@@ -50,13 +48,6 @@ BoardPrototype::BoardPrototype()
         { "",            "",         true,  "",            ""             },
         { "",            "",         true,  "",            ""             }
     }};
-}
-
-void BoardPrototype::setDark (bool shouldBeDark)
-{
-    dark = shouldBeDark;
-    theme.build (accents::machine(), dark);
-    repaint();
 }
 
 void BoardPrototype::setSelectedSlot (int index)
@@ -319,8 +310,20 @@ void BoardPrototype::paintHeader (juce::Graphics& g) const
 {
     const juce::Rectangle<float> header { kPad, 12.0f, (float) getWidth() - kPad * 2.0f, 30.0f };
 
-    text (g, "pump BOARD", { header.getX(), header.getY() - 7.0f, 260.0f, 26.0f },
-          theme.ink, 20.0f, juce::Justification::centredLeft, true, 1.4f);
+    // The brand as Thunder's IDM skins set theirs: bold, upper case, tracked, the second word in the accent
+    // (Thunder's ".brand .plus" is pink in IDM pink & green).
+    {
+        const auto brandFont = fonts::bold (20.0f, 1.6f);
+        const juce::String first ("PUMP "), second ("BOARD");
+        const float firstWidth = juce::GlyphArrangement::getStringWidth (brandFont, first);
+        const juce::Rectangle<float> brand { header.getX(), header.getY() - 7.0f, 260.0f, 26.0f };
+
+        g.setFont (brandFont);
+        g.setColour (theme.ink);
+        g.drawText (first, brand, juce::Justification::centredLeft, false);
+        g.setColour (theme.neon);
+        g.drawText (second, brand.withTrimmedLeft (firstWidth), juce::Justification::centredLeft, false);
+    }
 
     text (g, "PEDALBOARD", { header.getX() + 2.0f, header.getY() + 18.0f, 260.0f, 14.0f },
           theme.ink2, 9.5f, juce::Justification::centredLeft, true, 1.6f);
@@ -332,7 +335,7 @@ void BoardPrototype::paintHeader (juce::Graphics& g) const
         const bool lit = kHeaderKeys[i].key == kBypass && bypassActive;
 
         draw::keyBox (g, theme, box, lit, false, lit ? theme.red : juce::Colour(), 0.0f);
-        text (g, kHeaderKeys[i].label, box, lit ? theme.bg : theme.ink,
+        text (g, kHeaderKeys[i].label, box, theme.ink,                   // ink on pink when lit, as Thunder's PLAY
               10.0f, juce::Justification::centred, true, 0.8f);
     }
 
@@ -354,12 +357,7 @@ void BoardPrototype::paintSlot (juce::Graphics& g, int index, const SlotInfo& sl
     const bool isDragSource = dragging && dragFrom == index;
     const auto neon = accentForCategory (slot.category);
 
-    // body: panel fill, ink outline, offset block behind
-    g.setColour (theme.bg);
-    g.fillRect (r.translated (4.0f, 4.0f));
-    g.setColour (theme.dim);
-    g.drawRect (r.translated (4.0f, 4.0f).reduced (0.75f), 1.5f);
-
+    // body: panel fill and ink outline, flat (the IDM skin has no offset block)
     g.setColour (empty ? theme.bg : theme.panel);
     g.fillRect (r);
 

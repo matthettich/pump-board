@@ -26,7 +26,6 @@ public:
 private:
     // Card 5.5: the content is rebuilt when the skin changes, so the window keeps the engines it was given.
     void buildContent();
-    void rebuildContent();
 
     AudioEngine& engine;
     BoardProcessor& processor;
