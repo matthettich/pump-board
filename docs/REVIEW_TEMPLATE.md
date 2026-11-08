@@ -127,58 +127,80 @@ cannot be done from a terminal.
 ## Hand-test checklist
 
 In the order worth trying it. Each line says what should happen; if it does not, that is a bug, not a gap.
+Tests 1-8 are the ones to do first: they find a broken audio path or a lost board before anything cosmetic, and
+each leaves the app in the state the next one needs. Everything after them can wait.
+
+Tests 3 and 4 cover cards 5.31-5.34 and are newer than the rest of this review. On 2026-11-08 the list
+was flattened — it had two 15s and two 16s — and the eight priority tests were moved to the top.
+
+### First: the eight that matter
 
 1. **Launch.** Three pedals are on the board, the status line shows the device, `< >  SAVE  BYPASS` are in the
    header. No warning bar.
-2. **Footswitches.** Click a pedal's switch: the LED, the neon edge and the sound change. Click it again.
-3. **Knobs.** Select a pedal, turn a knob: the value on the pedal's silkscreen follows, and the star appears in
+2. **Dry vs wet through one pedal.** Click a pedal's switch: the LED, the neon edge and the sound all change.
+   Click it again and they go back. With a guitar plugged in, off has to be audibly dry and on has to be audibly
+   the pedal — this is the first time audio is heard through a slot at all.
+3. **TWANG, four ways.** Put `pump TWANG` on slot 1, set MIX to 50 and play a chord: the springs ring. Set MIX
+   to 100 and play again: still rings, not silence. Then, while playing, step SPRING MODEL through all six
+   positions: every model rings, the digital ones included. Finally quit and relaunch with TWANG still on the
+   board and play it cold, before touching anything: it rings first time, without replacing the pedal. That last
+   one is the startup-only failure the owner hit — one NaN poisoning the pedal's state — so it only shows up on
+   a fresh launch (cards 5.31, 5.34, and the 7 Nov NaN card).
+4. **TUBE oversampling under a held note.** Hold a note with `pump TUBE` on the board and change OVERSAMPLING
+   from 4x to 1x *while it rings*: nothing shifts, no phasey jump, no lurch. Release, wait a beat, play again:
+   now the new setting is in force, and the latency in the status line moves only at that point (card 5.33).
+5. **Save and restore in one step.** PRESETS → SAVE THIS BOARD AS…, name it "Test board". Change a value, press
+   SAVE. PRESETS shows it and the star goes away. Quit, reopen: the changed value is there, the header shows
+   "TEST BOARD", and there is no star. This is the whole of phase 4 in one step.
+6. **Knobs.** Select a pedal and turn a knob: the value on the pedal's silkscreen follows and the star appears in
    the header. Double-click the knob: it returns to its default.
-4. **Learn from a key.** Right-click a knob → Learn, press `q`: the action popup appears with Value ticked.
-   Choose it; the MAPPINGS button shows the row. Press `q` and watch the knob move.
-5. **Learn from MIDI** (footswitch plugged in): the same, but press the switch instead. Then play the switch
-   with the app focused and confirm it drives the target and nothing else.
-6. **Macro.** Right-click a macro → Add target, click a knob on a pedal, accept the popup. Turn the macro: the
-   target moves and the pedal's value display follows. Rename the macro; the name on the strip changes.
-7. **Reorder.** Drag a pedal to another position while playing. The sound stays continuous and the ALLOC badge
-   (Debug) stays off.
-8. **Save As.** PRESETS → SAVE THIS BOARD AS…, name it "Test board". Change a value, press SAVE. PRESETS shows
-   it; the star goes away.
-9. **Relaunch.** Quit and open the app: the changed value is there, the header shows "TEST BOARD", and no star.
-   This is the whole of phase 4 in one step.
-10. **Load while playing.** With a note ringing, load another preset. Listen for a click — this is the one
-    claim that cannot be settled from code.
-11. **Bad file.** Save a board, break its JSON in a text editor, load it. A dismissable bar explains; the app
+7. **Learn from a key.** Right-click a knob → Learn, press `q`: the action popup appears with Value ticked. Choose
+   it; the MAPPINGS button shows the row. Press `q` and watch the knob move.
+8. **Ten minutes** at 64 samples with a full board: no dropouts, no ALLOC badge (Debug), meters sane.
+
+### The rest, when you have time
+
+9. **Learn from MIDI** (footswitch plugged in): the same as test 7, but press the switch instead. Then play the
+   switch with the app focused and confirm it drives the target and nothing else.
+10. **Macro.** Right-click a macro → Add target, click a knob on a pedal, accept the popup. Turn the macro: the
+    target moves and the pedal's value display follows. Rename the macro; the name on the strip changes.
+11. **Reorder.** Drag a pedal to another position while playing. The sound stays continuous and the ALLOC badge
+    (Debug) stays off.
+12. **Load while playing.** With a note ringing, load another preset. Listen for a click — this is the one claim
+    that cannot be settled from code.
+13. **Bad file.** Save a board, break its JSON in a text editor, load it. A dismissable bar explains; the app
     keeps playing the board it had.
-12. **Measure the round trip.** Patch an output back into an input, then Settings → MEASURE ROUND TRIP. A
-    number appears within a second; with nothing patched the line says CHECK THE LOOPBACK CABLE. Compare it
-    with the reported figure above it — the gap is the interface's real converter overhead.
-13. **Ten minutes** at 64 samples with a full board: no dropouts, no ALLOC badge, meters sane.
-14. **Flip the skin.** Settings → SKIN: the window rebuilds in the light palette and keeps its size and position.
+14. **Measure the round trip.** Patch an output back into an input, then Settings → MEASURE ROUND TRIP. A number
+    appears within a second; with nothing patched the line says CHECK THE LOOPBACK CABLE. Compare it with the
+    reported figure above it — the gap is the interface's real converter overhead.
+15. **The tempo is the device's.** Set 97 BPM, load another board, quit and reopen the app. Still 97, on the
+    other board too. It is not in any `.board` file — that is the design, not a lost setting. With a clock
+    source running at 120, the field should follow within a beat or two; `stop` leaves it where it landed.
+16. **Read the status line.** With COMP (lookahead up) or CRUSH on the board it should end `BOARD 6.0 ms` or
+    similar; with nothing latency-reporting on the board the field should be absent, not `0.0 ms`.
+17. **Bypass with a latency pedal on the board.** Put COMP (with 2 ms lookahead) or CRUSH on slot 1, play, and
+    press the board bypass. There should be no hollow, phasey drop in the crossfade, and switching the slot
+    itself off should not comb either.
+18. **Flip the skin.** Settings → SKIN: the window rebuilds in the light palette and keeps its size and position.
     Every panel should change — board, slots, macro strip, meters, editor, and the side column with the four
     buttons (card 5.30: that strip used to stay dark). If a dark rim still shows around the outer edges, that is
     the window frame's own background, a known gap.
-15. **The tempo is the device's.** Set 97 BPM, load another board, quit and reopen the app. Still 97, on the
-    other board too. It is not in any `.board` file — that is the design, not a lost setting.
-16. **New board.** Click NEW BOARD: it asks first if a board is loaded, then gives sixteen empty "+" positions,
+19. **New board.** Click NEW BOARD: it asks first if a board is loaded, then gives sixteen empty "+" positions,
     UNTITLED in the header, no macros and no mappings — and the tempo you set is still there. Quit and reopen:
     the empty board is what comes back.
-17. **Take a pedal off.** Click the small × in a pedal's top-right corner: it empties that position, the slot beside
-    it does not jump into its place, and the "+" takes a new pedal. Right-click the same pedal → REMOVE PEDAL does
-    the same thing. With a guitar plugged in the emptied position should be silent (dry), not muted.
-18. **Rename and delete.** PRESETS → hover a board → RENAME... gives it a new name (menu and header follow);
-    DELETE... asks first, then the file is in the Bin. SAVE afterwards still overwrites the renamed board
-    rather than making a second copy.
-15. **Read the status line.** With COMP (lookahead up) or CRUSH on the board it should end `BOARD 6.0 ms` or
-    similar; with nothing latency-reporting on the board the field should be absent, not `0.0 ms`.
-16. **Bypass with a latency pedal on the board.** Put COMP (with 2 ms lookahead) or CRUSH on slot 1, play, and
-    press the board bypass. There should be no hollow, phasey drop in the crossfade, and switching the slot
-    itself off should not comb either.
+20. **Take a pedal off.** Click the small x in a pedal's top-right corner: it empties that position, the slot
+    beside it does not jump into its place, and the "+" takes a new pedal. Right-click the same pedal → REMOVE
+    PEDAL does the same thing. With a guitar plugged in the emptied position should be silent (dry), not muted.
+21. **Rename and delete.** PRESETS → hover a board → RENAME... gives it a new name (menu and header follow);
+    DELETE... asks first, then the file is in the Bin. SAVE afterwards still overwrites the renamed board rather
+    than making a second copy.
 
-Not testable yet: renaming or deleting a preset in the app, and the tempo coming back with a board.
+Three of these need gear the machine does not have: 9 a MIDI footswitch, 14 a cable from an output back to an
+input, 15 a clock source. Everything else runs with nothing but a guitar.
 
 ## Summary of what is missing versus the plan
 
 - The card 2.5 searchable pedal picker and "Duplicate"; the separate `BoardView`/`EffectPicker` files.
 - A per-target macro view, and Learn on a macro knob (card 3.4's gaps).
-- Rename/delete presets; a per-board tempo (needs a schema decision).
+- A per-board tempo (needs a schema decision; the tempo is device-wide by design, and test 15 pins that).
 - Phases 5 and 6 in full; phase 7's overload warning and packaging.

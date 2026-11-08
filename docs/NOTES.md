@@ -758,3 +758,28 @@ not for merging. Every finding was checked against the code before changing anyt
 - GRUMBLE's mono dry path fixed **in pump** (matthettich/pump 419fbcf: a latency-aligned dry line per channel; the
   mono sum still drives the creature) and the submodule bumped to it. pump's own mix-0 test now uses a different,
   opposite-phase right channel and fails on the old engine. pump BOARD: 3216 expectations pass.
+
+## 2026-11-08 — card 5.36 (hand-test checklist reordered and renumbered)
+- The checklist in `REVIEW_TEMPLATE.md` had grown by appending, and it showed: two items numbered 15 and two
+  numbered 16, so "test 15" meant two different things. It satisfied the letter of the plan (a checklist) while
+  defeating its purpose (a human knows what to do first).
+- Renumbered as one flat list 1-21 and split into "First: the eight that matter" / "The rest, when you have
+  time". Order is by what a failure costs: launch and restore, then dry-vs-wet, then the things changed most
+  recently under the fingers, then save/restore, knobs, key-learn, and the ten-minute soak last because it is
+  the only test that spends real time.
+- Three tests are new, because recent fixes had no checklist item covering them: TWANG ringing at MIX 100 and
+  across all six SPRING MODEL positions (5.31, 5.34) plus a cold launch with TWANG loaded (the 7 Nov NaN card —
+  that failure only appears on a fresh launch); TUBE oversampling changing only once playing stops (5.33); and
+  a clock source driving the tempo field (5.32), folded into the device-tempo test. Each names its card, so a
+  failure points at a specific change rather than "TWANG is broken".
+- Dropped a stale line: "Not testable yet: renaming or deleting a preset" contradicted the rename/delete test
+  three items above it, and "the tempo coming back with a board" is the design, not a gap. The closing line now
+  names the three tests that need gear (footswitch, loopback cable, clock source).
+- This landed on a `main` that had moved 14 commits ahead (CI, the release workflow, TUNE/VOX/GRUMBLE, the TWANG
+  NaN fix, the paged editor). `REVIEW_TEMPLATE.md` was untouched by all of it, so the reorder re-applied whole;
+  the NOTES card is appended below the CodeRabbit card rather than merged into it.
+- Known and left alone: the phase 0-4 tables in this review still describe 21 pedals and 2496 expectations, both
+  of which the same 14 commits made stale (24 pedals, 3216 expectations). Rewriting that history is not the same
+  job as fixing the checklist, and a stale record that says when it was written is better than a quietly edited
+  one.
+- Not verified: none of these 21 tests has been run. This edit makes the checklist followable, not passing.
