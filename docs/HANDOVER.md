@@ -6,8 +6,9 @@ mapping, presets. pump's DSP is compiled in as source; nothing in pump itself is
 This file is the state of play and what to do next. `docs/NOTES.md` holds the reasoning behind every
 decision and deviation — read it before changing anything, it is where the traps are written down.
 
-- **Where we are:** phases 0–4 are complete (card 0.4's probe closed the last gap) and phase 5 has begun with
-  CRUSH, SWIRL and COMP. Boards are `.board` JSON files in `~/Music/pump BOARD/Boards`, a working copy reopens on launch with slots, macros and
+- **Where we are:** phases 0–4 are complete (card 0.4's probe closed the last gap). Phase 5 is well along —
+  24 pedals are registered, the most recent being TUNE, VOX and GRUMBLE — and what it still owes is whatever
+  `PUMP_DSP_MAP.md` marks as not yet adapted. Boards are `.board` JSON files in `~/Music/pump BOARD/Boards`, a working copy reopens on launch with slots, macros and
   mappings, and the app can be played: sixteen slots, eight macros, MIDI and key mappings, presets with
   program changes, and a measured round trip in Settings. What is left is hand-testing
   (`REVIEW_TEMPLATE.md`) and phases 5–7 (more pedals, custom pedals, the full skin).

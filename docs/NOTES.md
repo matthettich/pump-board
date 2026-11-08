@@ -817,4 +817,7 @@ not for merging. Every finding was checked against the code before changing anyt
   the point worth remembering — the suite is green and the app still has visible defects.
 - Not changed: the "Still open" and "Decisions still open" lists, which are still accurate, and the review's
   phase tables, which are stale on purpose (recorded as item 5).
+- Also corrected while there: the "Where we are" bullet still said phase 5 had begun with CRUSH, SWIRL and
+  COMP. The registry has 24 pedals now, so it names the three most recent (TUNE, VOX, GRUMBLE) and defers the
+  remaining count to `PUMP_DSP_MAP.md` rather than asserting a number I did not check.
 - Not verified: audio, interaction, or that the quit path saves.
