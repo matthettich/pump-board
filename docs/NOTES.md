@@ -783,3 +783,19 @@ not for merging. Every finding was checked against the code before changing anyt
   job as fixing the checklist, and a stale record that says when it was written is better than a quietly edited
   one.
 - Not verified: none of these 21 tests has been run. This edit makes the checklist followable, not passing.
+
+## 2026-11-08 — smoke test of the rebuilt app, and the checklist's "three pedals"
+- Launched `build/PumpBoard_artefacts/Debug/pump BOARD.app` from the shell with output captured. Log:
+  `JUCE v9.0.5`, `pump BOARD: 3 slot(s) published`, `pump BOARD: restored 7 pedal(s), 0 mapping(s)`. Ran ten
+  seconds, no assertion, no error line, quit on SIGTERM, and `current.board` was rewritten on the way out
+  (mtime moved, byte size unchanged at 4226).
+- The 3 and the 7 are not a contradiction and not a bug: `Main.cpp` seeds TUBE, ECHO and SPRING before the
+  window exists so the editor opens on a real pedal, then `MainWindow` restores the file over the top. Both
+  lines are logs of real events, which makes the pair read like a miscount. Left as is — the seed is
+  deliberate — but the checklist now says which number to trust.
+- Fixed in the checklist as a result: test 1 said "three pedals are on the board", which is only true of a
+  first launch. It now says the last saved board's pedals, names the seeded chain as the no-file case, and says
+  `restored N pedal(s)` is the figure that has to match.
+- The saved board is 7 pedals, name empty, no macros, no mappings: `pump.tube` (off), then six more.
+- Not verified: how any of it sounds, and whether the window actually drew correctly — I read the log and the
+  process, I did not look at the screen or hear a pedal.

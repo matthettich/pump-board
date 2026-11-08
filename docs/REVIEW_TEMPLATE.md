@@ -135,8 +135,10 @@ was flattened — it had two 15s and two 16s — and the eight priority tests we
 
 ### First: the eight that matter
 
-1. **Launch.** Three pedals are on the board, the status line shows the device, `< >  SAVE  BYPASS` are in the
-   header. No warning bar.
+1. **Launch.** The pedals you last saved are on the board — a first launch with no `current.board` seeds TUBE,
+   ECHO and SPRING instead — the status line shows the device, `< >  SAVE  BYPASS` are in the header, and there
+   is no warning bar. The log should say `restored N pedal(s)` with the same N the board has; a `3 slot(s)
+   published` line before it is the seeded chain, not the count that matters.
 2. **Dry vs wet through one pedal.** Click a pedal's switch: the LED, the neon edge and the sound all change.
    Click it again and they go back. With a guitar plugged in, off has to be audibly dry and on has to be audibly
    the pedal — this is the first time audio is heard through a slot at all.
