@@ -11,8 +11,9 @@ decision and deviation — read it before changing anything, it is where the tra
   mappings, and the app can be played: sixteen slots, eight macros, MIDI and key mappings, presets with
   program changes, and a measured round trip in Settings. What is left is hand-testing
   (`REVIEW_TEMPLATE.md`) and phases 5–7 (more pedals, custom pedals, the full skin).
-- **Tests:** 3216 expectations in Debug, 0 failing. Last run: 6 Nov 2026 on **Linux** in a cloud
-  session (see "Building on Linux" below) — not yet re-run on the Neo.
+- **Tests:** 3216 expectations in Debug, 0 failing. Last run: 8 Nov 2026 on this Mac, after a clean
+  rebuild of all 256 targets with 0 warnings in `Source/` and `Tests/`; the 6 Nov cloud run on Linux
+  agrees. That run also caught the one warning the incremental builds had been hiding.
 - **Latest pass (6 Nov 2026):** a senior-style review fixed a use-after-free on pedal swap/remove/device change,
   stale mappings after a pedal goes, empty slots vanishing on load, a click when a latency pedal is switched off,
   and a dozen smaller bugs; then the whole app was reskinned to Thunder Plus's **IDM PINK & GREEN**. The full list
@@ -133,6 +134,63 @@ If you find something in this list misbehaving, say what happened and it gets fi
 guessing at interaction quality from code.
 
 ---
+
+## What still needs doing (8 Nov 2026)
+
+Written after a clean rebuild and the first look at the running window on this Mac. Ordered by what it costs to
+leave undone. The lists further down — "Still open" and "Decisions still open" — are unchanged and still current.
+
+### 1. The hand-test pass. Nothing has been driven
+
+`docs/REVIEW_TEMPLATE.md` now carries one flat checklist (it used to have two items numbered 15 and two numbered
+16), with the eight that matter first: launch, dry-vs-wet through one pedal, TWANG four ways, TUBE oversampling
+under a held note, save-and-restore, knobs, key-learn, ten-minute soak. All 21 are unrun. Three need gear: a MIDI
+footswitch, a loopback cable, a clock source.
+
+### 2. The slot load bar is drawn across each pedal's second value line
+
+Seen on screen, and confirmed by arithmetic: the bar is `r.getBottom() - 40.0f`, 3 px tall (`SlotView.cpp`), the
+text is `r.getY() + 60.0f`, 12 px tall. A card here is about 102 pt, so the bar lands at 62 — inside the text's
+60–72 box. On every pedal the lower line has a grey bar through it (`DRIVE 12 dB`, `DECAY 2.50 s`, `DRIP 50 %`).
+The harness renders never showed it because the bar only draws when `load > 0.0005f` and `--render-slots` never
+calls `setLoad`. Move the bar clear of the text; no test can catch this, only a look.
+
+### 3. `--render-slots` cannot show the real board, and invents knob names
+
+It hardcodes `setPedalCount (3)` with TUBE/ECHO/SPRING and fixed label strings, so it cannot check what actually
+restores — it drew three pedals while the app restores seven. Its selected panel also invents knob names
+(DWELL/DRIP/TENSION under a `pump TUBE` heading); the live panel is correct, so this is a tool that lies, not a
+UI bug. Either load `current.board` in that path or mark it plainly as a fixture.
+
+### 4. The status line prints four decimals
+
+`LOAD 36.9914%`, in a line where everything else is one decimal or an integer.
+
+### 5. The review's phase tables describe a smaller app
+
+`REVIEW_TEMPLATE.md` still says 21 pedals and 2496 expectations; it is 24 and 3216. Deliberately left when the
+checklist was renumbered: rewriting a dated record is a different job from fixing a checklist.
+
+### Verified today, so nobody repeats it
+
+- Clean rebuild, 256 targets: 0 errors, and **one** warning in our code — `GenericEffectEditor.cpp:413`, an
+  implicit int→float in the paged editor's name-width estimate. Fixed with an explicit `static_cast`; 0 warnings
+  in `Source/` and `Tests/` after. The other 1039 warnings come from `external/pump` and JUCE headers and stay.
+- `3216 passed, 0 failed` after that fix.
+- Launch on Debug: `restored 7 pedal(s), 0 mapping(s)`, no assertion. The window draws the saved board — TUBE
+  (off), ECHO, SPRING, SWIRL, TONE, SPRING, TWANG — plus the eight-macro strip, the meters and trims, and TUBE's
+  real parameters in the selected panel (CIRCUIT Triode, DRIVE 12 dB, BIAS 0 %, SAG 25 %, VOLTAGE 100 %, STAGES 1,
+  FOCUS Full, LOW CUT 10 Hz, TONE 0 %, HIGH CUT 22000 Hz, MIX 100 %, OUT GAIN 0 dB, OVERSAMPLING 4x).
+- A window screenshot needs Screen Recording permission for the app hosting the shell. Without it `screencapture`
+  writes nothing and reports `could not create image from display`; with it, the capture is a full-screen grab and
+  the window has to be frontmost, or you photograph whatever is on top instead.
+
+### Not verified
+
+- Any sound. The meters sat at -inf; no guitar has been through this app.
+- Any interaction: no footswitch clicked, no pedal dragged, no knob turned, no preset loaded, no page key pressed.
+- Whether quitting saves. The process was signalled rather than told to quit; `current.board` was rewritten, but
+  that is equally consistent with the autosave firing while it ran.
 
 ## Decisions still open for the owner
 
