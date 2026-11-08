@@ -410,7 +410,7 @@ GridChoice chooseGrid (int count, int width, int height, int longestName)
         const int cellWidth = width / juce::jmax (1, perRow);
         const int rowHeight = height / rows;
         const int dial = juce::jmin (cellWidth - 10, rowHeight - 2 * kLabelRow - 4);
-        const bool fits = cellWidth >= juce::jmax (kMinCellForName, (int) (longestName * 5.3f) + 8);
+        const bool fits = cellWidth >= juce::jmax (kMinCellForName, (int) (static_cast<float> (longestName) * 5.3f) + 8);
 
         // Layouts whose names fit beat those that do not; among equals the bigger knob wins (fewer rows on a tie).
         if (! haveBest || (fits && ! bestFits) || (fits == bestFits && dial > best.dial))
