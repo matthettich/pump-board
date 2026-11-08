@@ -88,6 +88,14 @@ void PluginProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
     session.getProcessor().processBlock (buffer, midi);
 }
 
+juce::AudioProcessorEditor* PluginProcessor::createEditor()
+{
+    // Card 8.5: the same board the app window draws, with the plugin's answers behind the HostServices seam. What
+    // this returns belongs to the host's wrapper, which deletes it when the editor window closes, so a fresh one each
+    // time is what it expects -- never a cached instance.
+    return new PluginEditor (*this);
+}
+
 void PluginProcessor::getStateInformation (juce::MemoryBlock& destination)
 {
     const auto json = juce::JSON::toString (session.captureState(), false);

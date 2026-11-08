@@ -189,4 +189,6 @@ target_compile_definitions(PumpBoardPlugin PRIVATE JUCE_VST3_CAN_REPLACE_VST2=0)
 juce_add_console_app(PumpBoardTests PRODUCT_NAME "PumpBoardTests")
 file(GLOB_RECURSE PB_TEST_SOURCES CONFIGURE_DEPENDS Tests/*.cpp)
 target_sources(PumpBoardTests PRIVATE ${PB_TEST_SOURCES})
-target_link_libraries(PumpBoardTests PRIVATE PumpBoardCore PumpBoardPluginSupport)
+# Core is named once, through the support library's PUBLIC link: naming it here as well made the linker say
+# "ignoring duplicate libraries: 'libPumpBoardCore.a'" on every test link.
+target_link_libraries(PumpBoardTests PRIVATE PumpBoardPluginSupport)

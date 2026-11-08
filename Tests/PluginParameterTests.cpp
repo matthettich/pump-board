@@ -160,7 +160,9 @@ public:
             pb::alloc::resetViolations();
 
             {
-                const pb::alloc::Scope scope;
+                // The guard is real only where the allocation hooks are compiled in (Debug); in Release the Scope is
+                // an empty struct, so a plain unused local would warn. The test is worth running in both.
+                [[maybe_unused]] const pb::alloc::Scope scope;
 
                 for (auto* parameter : processor.getParameters())
                     parameter->setValue (0.5f);
