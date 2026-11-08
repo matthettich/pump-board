@@ -1040,3 +1040,20 @@ plugin in its own CI job.
 - **Side effect worth naming:** `submodules: true` in `actions/checkout` is recursive, so adding this submodule would
   have made the *app* job clone the SDK's GUI library and documentation too. Both jobs now initialise the submodules
   they actually use, by name.
+## 2026-11-08 — handover: what still needs doing, after the first proper look
+- `HANDOVER.md` gained a dated section at the top of the decision lists, because its "state of play" had drifted
+  from the code: the tests bullet still claimed the last run was 6 Nov on Linux, and nothing recorded that the
+  running window had finally been looked at.
+- It now says what is verified (clean 256-target rebuild, one warning found and fixed, 3216 passing, the restored
+  board drawn with its seven pedals and eight macros) and what is not (any sound, any interaction, the quit
+  path) in the same place, so the next person does not have to reconstruct it from `NOTES.md`.
+- Three of the five remaining items are new today and all came from looking rather than reading: the slot load
+  bar crossing the second value line, the LOAD percentage's four decimals, and `--render-slots` drawing three
+  hardcoded pedals instead of the board that restores. None of them is reachable from the test suite, which is
+  the point worth remembering — the suite is green and the app still has visible defects.
+- Not changed: the "Still open" and "Decisions still open" lists, which are still accurate, and the review's
+  phase tables, which are stale on purpose (recorded as item 5).
+- Also corrected while there: the "Where we are" bullet still said phase 5 had begun with CRUSH, SWIRL and
+  COMP. The registry has 24 pedals now, so it names the three most recent (TUNE, VOX, GRUMBLE) and defers the
+  remaining count to `PUMP_DSP_MAP.md` rather than asserting a number I did not check.
+- Not verified: audio, interaction, or that the quit path saves.
