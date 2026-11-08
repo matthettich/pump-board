@@ -100,37 +100,53 @@ juce::var PluginSession::captureState() const
 
 bool PluginSession::restoreState (const juce::var& state)
 {
+    // Card 8.3: a host only ever sees the bool, which says nothing about why its project's state was dropped. The
+    // reason is kept here instead, for the host's log and for the tests.
+    const auto refuse = [this] (const juce::String& reason)
+    {
+        lastRestoreError = reason;
+        return false;
+    };
+
+    lastRestoreError.clear();
+
     auto* object = state.getDynamicObject();
 
     if (object == nullptr)
-        return false;
+        return refuse ("the state is not an object");
 
     if (object->getProperty (kStateFormatKey).toString() != kStateFormat)
-        return false;
+        return refuse ("the state belongs to something else: '"
+                       + object->getProperty (kStateFormatKey).toString() + "'");
 
     const auto version = object->getProperty (kStateVersionKey);
 
     if (! (version.isInt() || version.isDouble()))
-        return false;
+        return refuse ("the state has no version");
 
     // Exactly this build's version. An older one has no reader yet, and a newer one was written by a build that knew
     // more than this one: half-applying it would keep the pedals and lose whatever it added.
     if ((int) version != kStateVersion)
-        return false;
+        return refuse ("the state is version " + juce::String ((int) version) + ", and this build writes "
+                       + juce::String (kStateVersion));
 
     const auto boardText = object->getProperty (kStateBoardKey).toString();
 
     if (boardText.isEmpty())
-        return false;
+        return refuse ("the state holds no board");
 
     // Parse before touching anything: a board that will not read leaves the current one exactly as it was.
     BoardData data;
 
-    if (! fromJson (boardText, data).ok)
-        return false;
+    const auto parsed = fromJson (boardText, data);
 
-    if (! apply (data, model, macros, learn, registry).ok)
-        return false;
+    if (! parsed.ok)
+        return refuse ("the board in the state did not read: " + parsed.error);
+
+    const auto applied = apply (data, model, macros, learn, registry);
+
+    if (! applied.ok)
+        return refuse ("the board read but could not be applied: " + applied.error);
 
     const int tempoIndex = registry.find (kStateTempoId);
     const auto tempo = object->getProperty (kStateTempoKey);

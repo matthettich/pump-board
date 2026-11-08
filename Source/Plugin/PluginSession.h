@@ -46,6 +46,10 @@ public:
     // truncated JSON, or a board document that will not parse.
     bool restoreState (const juce::var& state);
 
+    // Card 8.3: why the last restore was refused. A host can only see the return value, which says nothing, and
+    // "the tempo is wrong" is a poor description of a state that was dropped. Empty after a restore that worked.
+    const juce::String& getLastRestoreError() const noexcept { return lastRestoreError; }
+
     // Card 8.5: set by the editor. A restore frees the slots underneath it, so it has to re-point at the new chain
     // before its panel's timer can touch a freed one. Called on the message thread, only after a restore succeeded.
     std::function<void()> onBoardReplaced;
@@ -78,6 +82,7 @@ private:
     BoardModel model;
     int tempoIndex = ParameterRegistry::kInvalid;
     bool editorAttached = false;
+    juce::String lastRestoreError;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PluginSession)
 };

@@ -39,6 +39,22 @@ juce::String envelope (const juce::String& format, const juce::var& version, con
     return juce::JSON::toString (juce::var (object.get()), false);
 }
 
+// One line naming where two board documents part company. Comparing two long JSON documents says nothing readable
+// in a CI annotation, and the annotation is the only part of a failed run that can be read without a token.
+juce::String firstDifference (const juce::String& before, const juce::String& after)
+{
+    const int limit = juce::jmin (before.length(), after.length());
+    int i = 0;
+
+    while (i < limit && before[i] == after[i])
+        ++i;
+
+    const int from = juce::jmax (0, i - 25);
+
+    return "the board changed at character " + juce::String (i) + ": now '" + after.substring (from, i + 35)
+           + "', was '" + before.substring (from, i + 35) + "'";
+}
+
 class PluginStateTests final : public juce::UnitTest
 {
 public:
@@ -114,7 +130,8 @@ public:
             offer (envelope ("some-other-plugin", 1, "{}"));                                // another product
             offer (envelope ("pumpboard-plugin-state", 1, "not a board"));                  // our version, bad board
 
-            expectEquals (boardJsonOf (session), before);
+            const auto after = boardJsonOf (session);
+            expect (after == before, firstDifference (before, after));
         }
 
         beginTest ("a restore during playback swaps behind the bypass and comes back");
@@ -137,6 +154,9 @@ public:
             juce::Timer::callPendingTimersSynchronously();
 
             expect (! live.getSession().isBoardBypassed());
+
+            // A refused restore is the failure worth reading: "the tempo is 120" only says so indirectly.
+            expect (live.getSession().getLastRestoreError().isEmpty(), live.getSession().getLastRestoreError());
             expectWithinAbsoluteError (tempoOf (live.getSession()), 90.0f, 1.0e-4f);
 
             // The board underneath the fade is a live one: it still processes.
