@@ -998,3 +998,45 @@ plugin in its own CI job.
   not anything is assigned, so a reader counting macros from the JSON would have been misled.
 - Not verified: how any of it sounds, and whether the window actually drew correctly — I read the log and the
   process, I did not look at the screen or hear a pedal.
+
+## Card 8.9, second pass — the strict VST3 validator, pinned instead of fetched
+
+- **What:** `tools/vst3-validator/CMakeLists.txt` (new) builds `PumpBoardVst3Validator` — the VST3 SDK's own validator
+  plus the whole test suite it runs over a bundle (factory, busses, parameters, automation, processing, state,
+  threading). `external/vst3-sdk` (new submodule, pinned at release v3.8.1, commit `3cdf9ca`, with its `base`,
+  `pluginterfaces` and `public.sdk` pieces at the revisions that release names). The `plugin` job builds it after the
+  two formats and runs it over `pump BOARD.vst3`, so the first CI pass covers the VST3 the way `auval` already covers
+  the Audio Unit.
+- **Why a submodule and not copied sources:** the two dependencies this repository already has are submodules, and
+  third-party code stays in its own tree with its own headers and its own history. Copying ninety-six SDK files in
+  would put someone else's copyright into every file of ours it touches and make the pinned version a matter of
+  reading a diff; a submodule pin *is* the record of which validator judged which build, and it cannot drift without
+  the pointer changing in a commit. Nothing is fetched at build time beyond that checkout, and no prebuilt binary is
+  ever used.
+- **Why not the SDK's own cmake:** it wants to be the top-level project, requires CMake 3.25, turns on its GUI
+  library and its examples. One executable needs none of that, so the project lists the sources it compiles directly
+  and swaps three platform files (the bundle loader, the thread checker, the clipboard). It builds on its own
+  (`cmake -S tools/vst3-validator -B ...`), so `tools/` is not `external/` and nothing under `external/` was edited.
+- **Licence position, which the card asks about:** at this tag the SDK ships **MIT** (`LICENSE.txt`), not the older
+  dual GPL/proprietary terms. It is a build and CI tool: it is never linked into the app or either plugin bundle and
+  never ships in a release, and its licence travels with the submodule. The repository still has **no licence of its
+  own**, which is the owner decision the card names, unchanged by this.
+- **House rule, and where it had to bend:** "do not mention other companies' products by name" cannot survive a pin
+  on a vendor's SDK — `.gitmodules` carries their URL, and so does every header in the pinned tree. Everything this
+  repository *authors* stays vendor-neutral: the new CMake project, the workflow steps, the README and this note say
+  "the VST3 SDK", never the company. The name appears only in the submodule's own tree and in the URL that identifies
+  it.
+- **Checked here, on Linux, because the target is platform independent apart from three files:** `cmake` configure and
+  build clean on CMake 4.4.4; the resulting binary's `-selftest` runs 51 tests with 0 failures, which is the proof
+  that the test suite is really in the binary rather than compiled out; and every one of the 96 sources also compiles
+  under `g++ -std=c++17`.
+- **Not checked here:** the macOS path differs in exactly three files (bundle loader, thread checker, clipboard) plus
+  Cocoa and ARC, and those compile only on the runner. The first real run is the next CI push. The validator also
+  needs the bundle to carry at least an ad-hoc signature on Apple silicon to be loadable in process, so the step signs
+  it the same way the AU step already does.
+- **Deliberate limit:** the run is the standard suite, not `-e` (extensive), because the job cap is 60 minutes and the
+  runtime of the extensive pass over a sixteen-pedal chain is unknown; `-e` is one flag away if it turns out to be
+  cheap.
+- **Side effect worth naming:** `submodules: true` in `actions/checkout` is recursive, so adding this submodule would
+  have made the *app* job clone the SDK's GUI library and documentation too. Both jobs now initialise the submodules
+  they actually use, by name.

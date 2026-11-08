@@ -26,8 +26,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: true          # JUCE and pump only; pump's own nested submodules are not needed
+          # Named rather than `submodules: true`: that recurses into the validator's SDK too, which this job never
+          # builds. The app needs JUCE and pump; pump's own nested submodules are not needed.
+          submodules: false
           fetch-depth: 1
+
+      - name: Submodules
+        run: git submodule update --init --recursive external/JUCE external/pump
 
       - name: Tools
         run: brew install ninja || true
@@ -99,8 +104,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: true
+          # Submodules by hand rather than `submodules: true`: that recurses into the SDK, which then clones its
+          # GUI library and documentation, and this job builds neither. The three pieces the validator needs are
+          # named below instead.
+          submodules: false
           fetch-depth: 1
+
+      - name: Submodules
+        run: |
+          set -e
+          git submodule update --init --recursive external/JUCE external/pump
+          git submodule update --init external/vst3-sdk
+          git -C external/vst3-sdk submodule update --init base pluginterfaces public.sdk
 
       - name: Tools
         run: brew install ninja || true
@@ -169,6 +184,34 @@ jobs:
           file "$VST3/Contents/MacOS/pump BOARD"
           echo '--- moduleinfo.json, first 300 bytes:'
           head -c 300 "$VST3/Contents/Resources/moduleinfo.json"; echo
+
+      # Card 8.9: the strict validation. `auval` does this job for the Audio Unit and nothing did it for VST3, so a
+      # bundle could be unloadable, mismatched or unable to show its editor and the build stayed green. This is the
+      # VST3 SDK's own validator, built from the pinned submodule: the version that judges the bundle is the version
+      # in the repository's history, not whatever is newest on the day CI runs, and nothing is downloaded to build it.
+      - name: Build the validator
+        run: |
+          set -o pipefail
+          cmake -S tools/vst3-validator -B validator-build -G Ninja -DCMAKE_BUILD_TYPE=Release 2>&1 | tail -15
+          cmake --build validator-build 2>&1 | tee validator-build.log || {
+            grep -E "error:|FAILED" validator-build.log | head -20 | while IFS= read -r line; do echo "::error title=validator build::${line}"; done
+            exit 1; }
+          # A validator that cannot pass its own tests would report failures for a good plugin, so prove it first.
+          ./validator-build/PumpBoardVst3Validator -selftest | tail -3
+
+      - name: Validate the VST3
+        run: |
+          set -o pipefail
+          VST3=$(find build/PumpBoardPlugin_artefacts -maxdepth 4 -name "pump BOARD.vst3" | head -1)
+          # Apple silicon will not load a binary that carries no signature at all; the same ad-hoc signature the AU
+          # step uses is enough for an in-process load by our own unsigned executable.
+          codesign --force --sign - "$VST3"
+          ./validator-build/PumpBoardVst3Validator "$VST3" > validator.log 2>&1 || {
+            grep -E "ERROR|FAILED|Failed|error" validator.log | head -25 | while IFS= read -r line; do echo "::error title=validator::${line}"; done
+            tail -40 validator.log
+            exit 1; }
+          echo "tests passed: $(grep -c 'Succeeded' validator.log)"
+          tail -5 validator.log
 
       # Card 8.9: both formats in one zip with the note that says where they go. The app's zip is built by its own job
       # and is not touched here: additional software, in its own archive, on its own release below.

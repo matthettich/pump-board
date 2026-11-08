@@ -69,8 +69,9 @@ Unsigned like the app, so the `xattr` lines are what stop macOS refusing to load
 `WHERE TO PUT THESE.txt` with the same instructions. Boards saved in the app open in the plugin; a plugin instance
 keeps its board inside the project that loaded it and never writes the app's working copy.
 
-CI validates the Audio Unit with `auval` and checks the VST3 bundle for the files a host reads. The stricter
-third-party VST3 validator the plan asks for is not wired up yet — see `docs/NOTES.md`, card 8.9.
+CI validates the Audio Unit with `auval`, checks the VST3 bundle for the files a host reads, and then loads the VST3
+with the format's own validator and runs its test suite over it — the strict check the plan asks for, built from a
+pinned copy in the repository rather than downloaded, so the validator that judges a build is always the same one.
 
 ## Run
 
