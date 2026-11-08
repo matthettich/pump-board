@@ -48,7 +48,9 @@ jobs:
       - name: Run tests
         run: |
           set -o pipefail                     # a failing suite must fail the build, not hide behind tail
-          report() { grep -E "!!!|FAILED|failed" tests.log | head -15 | while IFS= read -r line; do echo "::error title=tests::${line}"; done; tail -40 tests.log; }
+          # Name the case as well as the assertion. JUCE prints "Starting tests in: <case>" before each case and one
+          # "!!!" line per failed assertion, and a bare "Test 3 failed" says nothing without knowing the case.
+          report() { awk '/^Starting tests in/ { c = $0 } /!!!/ { print c " | " $0 }' tests.log | head -20 | while IFS= read -r line; do echo "::error title=tests::${line}"; done; grep -E "^[0-9]+ passed" tests.log | while IFS= read -r line; do echo "::error title=tests::${line}"; done; tail -40 tests.log; }
           ./build/PumpBoardTests_artefacts/Release/PumpBoardTests > tests.log 2>&1 || { report; exit 1; }
           tail -3 tests.log
           grep -q " 0 failed" tests.log || { report; exit 1; }
