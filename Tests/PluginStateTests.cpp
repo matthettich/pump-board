@@ -55,6 +55,28 @@ juce::String firstDifference (const juce::String& before, const juce::String& af
            + "', was '" + before.substring (from, i + 35) + "'";
 }
 
+// The fade is a 30 Hz timer behind a 25 ms deadline, so a fixed sleep assumes an idle machine: on a loaded runner the
+// callback has not been posted when the sleep ends, and the test then fails for a reason that has nothing to do with
+// the plugin. Pump the pending timers until the condition holds, with a deadline, so a slow machine waits instead.
+template <typename Predicate>
+bool pumpTimersUntil (Predicate&& condition, int timeoutMs = 2000)
+{
+    const auto deadline = juce::Time::currentTimeMillis() + timeoutMs;
+
+    for (;;)
+    {
+        juce::Timer::callPendingTimersSynchronously();
+
+        if (condition())
+            return true;
+
+        if (juce::Time::currentTimeMillis() >= deadline)
+            return false;
+
+        juce::Thread::sleep (5);
+    }
+}
+
 class PluginStateTests final : public juce::UnitTest
 {
 public:
@@ -150,10 +172,10 @@ public:
             // The swap waits for the fade, so the board is bypassed and still the old one right after the call.
             expect (live.getSession().isBoardBypassed());
 
-            juce::Thread::sleep (40);                              // past the 25 ms fade, and past one timer tick
-            juce::Timer::callPendingTimersSynchronously();
-
-            expect (! live.getSession().isBoardBypassed());
+            // Nothing pumps timers while the test thread sleeps, so wait on the timer itself: it runs at 30 Hz and the
+            // swap lands one fade (25 ms) after the state arrived.
+            expect (pumpTimersUntil ([&live] { return ! live.getSession().isBoardBypassed(); }),
+                    "the deferred restore did not come back within two seconds of the fade deadline");
 
             // A refused restore is the failure worth reading: "the tempo is 120" only says so indirectly.
             expect (live.getSession().getLastRestoreError().isEmpty(), live.getSession().getLastRestoreError());
