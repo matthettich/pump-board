@@ -110,6 +110,7 @@ private:
 
     std::vector<PluginParameter*> parameters;          // owned by the AudioProcessor once addTo() has run
     std::array<PluginParameter*, kNumSlots> slotOn {};
+    std::array<PluginParameter*, MacroBank::kNumMacros> macroParams {};      // first eight, in macro order
     uint64_t lastSignature = 0;
     bool chainValid = false;
 };

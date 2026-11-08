@@ -182,8 +182,33 @@ void PluginProcessor::afterBoardRestored()
 {
     // The chain underneath the automation moved, so slot/N/on now drive different pedals; and every parameter's value
     // came from the host's own state, so it must not be echoed back to it as a change (cards 8.3, 8.4).
-    parameters.refreshChain();
+    //
+    // refreshChain() records the chain's new signature as it goes, so the timer's next tick would answer "nothing
+    // changed" and a host's generic editor would keep showing the old chain after a restore. Ask for the redraw here
+    // instead (CodeRabbit, PR #2).
+    if (parameters.refreshChain())
+        notifyHostOfChainChange();
+
     parameters.resync();
+}
+
+void PluginProcessor::notifyHostOfChainChange()
+{
+    // Hosts expect this on the message thread. A restore before prepareToPlay is already on it; one that arrives on a
+    // host's own worker thread is handed over rather than called from there.
+    if (juce::MessageManager::existsAndIsCurrentThread())
+    {
+        updateHostDisplay();
+        return;
+    }
+
+    juce::WeakReference<PluginProcessor> safeThis (this);
+
+    juce::MessageManager::callAsync ([safeThis]
+    {
+        if (safeThis != nullptr)
+            safeThis->updateHostDisplay();
+    });
 }
 
 bool PluginProcessor::updateHostTempo()

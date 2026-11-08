@@ -47,6 +47,7 @@ private:
     void timerCallback() override;
     void beginStateRestore (const juce::var& state);
     void afterBoardRestored();
+    void notifyHostOfChainChange();      // message thread, or handed to it when a host restores off-thread
     bool updateHostTempo();
     int chainLatencySamples();
 

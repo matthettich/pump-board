@@ -77,6 +77,11 @@ MainWindow::MainWindow (AudioEngine& engineIn, BoardProcessor& processorIn, Para
 
 void MainWindow::buildContent()
 {
+    // keys and learn now belong to the window and outlive the content, and the content's destructor clears the
+    // callbacks it registered on them. Drop the old content first, or its destructor wipes the callbacks the new one
+    // has just installed and learn captures, preset keys and the mappings view go dead after a reskin (PR #2).
+    clearContentComponent();
+
     auto* content = new BoardContent (*host, processor, registry, model, router, keys, learn, macros);
 
     setContentOwned (content, false);

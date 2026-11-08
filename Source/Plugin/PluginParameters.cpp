@@ -16,6 +16,13 @@ float denormaliseValue (float normalised, float minValue, float maxValue) noexce
     return minValue + juce::jlimit (0.0f, 1.0f, normalised) * (maxValue - minValue);
 }
 
+// The name a macro is listed under when the user has not renamed it. One place, because a rename that is cleared
+// back to empty has to fall back to this again rather than leaving the host with a nameless parameter.
+juce::String macroName (int macro)
+{
+    return "Macro " + juce::String (macro + 1);
+}
+
 // FNV-1a, the same shape the board uses to notice that its chain moved.
 uint64_t hashStep (uint64_t hash, uint64_t value) noexcept
 {
@@ -211,9 +218,9 @@ PluginParameters::PluginParameters (ParameterRegistry& registryIn, MacroBank& ma
         const int index = macros.macroParamIndex (m);
         const auto stored = macros.getName (m);
 
-        add ("macro/" + juce::String (m),
-             stored.isNotEmpty() ? stored : "Macro " + juce::String (m + 1),
-             PluginParameter::Kind::continuous, 0.0f, 1.0f, 0.0f, index);
+        macroParams[(size_t) m] = add ("macro/" + juce::String (m),
+                                       stored.isNotEmpty() ? stored : macroName (m),
+                                       PluginParameter::Kind::continuous, 0.0f, 1.0f, 0.0f, index);
     }
 
     addBoardParam ("board/bypass", "Board Bypass", PluginParameter::Kind::toggle);
@@ -266,10 +273,14 @@ bool PluginParameters::refreshChain()
         signature = hashStep (signature, (uint64_t) (uintptr_t) effect);
     }
 
-    // A renamed macro changes a name the host draws, not a value, so it has to reach updateHostDisplay as well.
+    // A renamed macro changes a name the host draws, not a value, so the parameter has to carry the new name and the
+    // signature has to move with it, which is what gets updateHostDisplay called.
     for (int m = 0; m < MacroBank::kNumMacros; ++m)
     {
-        const auto name = macros.getName (m);
+        const auto stored = macros.getName (m);
+        const auto name = stored.isNotEmpty() ? stored : macroName (m);
+
+        macroParams[(size_t) m]->setName (name);
 
         for (int c = 0; c < name.length(); ++c)
             signature = hashStep (signature, (uint64_t) name[c]);

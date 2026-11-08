@@ -1,0 +1,12 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+#
+# CodeRabbit paused its reviews on PR #2 — "Reviews paused ... this branch is under active development", because five
+# commits had landed since the last review. This branch is deliberately a series of small commits, so the default
+# makes the bot go quiet exactly when its findings matter.
+#
+# 0 turns the automatic pause off: every push is reviewed until the pull request is quiet. The documented cost is that
+# active branches use the hourly review allowance faster; that is preferred over unreviewed commits.
+# https://docs.coderabbit.ai/configuration/auto-review
+reviews:
+  auto_review:
+    auto_pause_after_reviewed_commits: 0

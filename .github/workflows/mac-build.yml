@@ -81,6 +81,9 @@ jobs:
       - name: Publish as the "latest" release
         env:
           GH_TOKEN: ${{ github.token }}
+          # Only the artifact is downloaded here, so there is no checkout and no git remote for gh to infer the
+          # repository from: without this, a push to main cannot create the release. (CodeRabbit, PR #2.)
+          GH_REPO: ${{ github.repository }}
         run: |
           gh release delete latest --yes --cleanup-tag || true
           gh release create latest pump-BOARD-mac-arm64.zip \

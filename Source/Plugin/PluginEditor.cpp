@@ -64,10 +64,20 @@ PluginEditor::PluginEditor (PluginProcessor& processorIn)
     // looking at it. The session says so, and the content re-points itself at the new slots before the panel's own
     // timer can touch a freed one.
     session.setEditorAttached (true);
+    // A host may restore its state from a thread of its own, and re-pointing the panel is message-thread work: hand
+    // it over rather than touching components from wherever the restore arrived (CodeRabbit, PR #2).
     session.onBoardReplaced = [safe = juce::Component::SafePointer<PluginEditor> (this)]
     {
-        if (safe != nullptr && safe->content != nullptr)
-            safe->content->repointSlot();
+        const auto repoint = [safe]
+        {
+            if (safe != nullptr && safe->content != nullptr)
+                safe->content->repointSlot();
+        };
+
+        if (juce::MessageManager::existsAndIsCurrentThread())
+            repoint();
+        else
+            juce::MessageManager::callAsync (repoint);
     };
 }
 
