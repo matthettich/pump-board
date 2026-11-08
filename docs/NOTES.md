@@ -974,3 +974,22 @@ plugin in its own CI job.
   only by a parse. The packaging and publishing steps cannot be run on this Linux machine: the packaging step's first
   real run is the next CI push, and the publish job only runs on `main`, so its first execution is whenever this
   reaches `main`.
+## 2026-11-08 — smoke test of the rebuilt app, and the checklist's "three pedals"
+- Launched `build/PumpBoard_artefacts/Debug/pump BOARD.app` from the shell with output captured. Log:
+  `JUCE v9.0.5`, `pump BOARD: 3 slot(s) published`, `pump BOARD: restored 7 pedal(s), 0 mapping(s)`. Ran ten
+  seconds, no assertion, no error line, quit on SIGTERM, and `current.board` was rewritten on the way out
+  (mtime moved, byte size unchanged at 4226).
+- The 3 and the 7 are not a contradiction and not a bug: `Main.cpp` seeds TUBE, ECHO and SPRING before the
+  window exists so the editor opens on a real pedal, then `MainWindow` restores the file over the top. Both
+  lines are logs of real events, which makes the pair read like a miscount. Left as is — the seed is
+  deliberate — but the checklist now says which number to trust.
+- Fixed in the checklist as a result: test 1 said "three pedals are on the board", which is only true of a
+  first launch. It now says the last saved board's pedals, names the seeded chain as the no-file case, and says
+  `restored N pedal(s)` is the figure that has to match.
+- The saved board is 7 pedals, name empty, 8 macros (the default `MACRO 1..8` bank, every one with no
+  targets), no mappings: `pump.tube` (off), `pump.echo`, `pump.spring`, `pump.swirl`, `pump.tone`,
+  a second `pump.spring`, `pump.twang`. Recorded rather than assumed: my first pass at this card said
+  "no macros" because the file's macro array is not empty — eight default entries are written whether or
+  not anything is assigned, so a reader counting macros from the JSON would have been misled.
+- Not verified: how any of it sounds, and whether the window actually drew correctly — I read the log and the
+  process, I did not look at the screen or hear a pedal.
