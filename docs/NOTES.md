@@ -1057,3 +1057,14 @@ plugin in its own CI job.
   COMP. The registry has 24 pedals now, so it names the three most recent (TUNE, VOX, GRUMBLE) and defers the
   remaining count to `PUMP_DSP_MAP.md` rather than asserting a number I did not check.
 - Not verified: audio, interaction, or that the quit path saves.
+
+- **What the first CI passes cost, and why it is worth recording:** the validator did not link on macOS, twice. CMake
+  picks the C++ driver for a mixed target, which does not bring the Objective-C runtime the bundle loader and the
+  clipboard code need, and the SDK's timing code reads the host clock through **CoreAudio** — a framework its own
+  top-level cmake adds in a separate optional step, so nothing in the validator's own target list mentions it. The
+  target now declares its linker language and links Foundation and CoreAudio. None of this can show up on Linux,
+  where the platform files are different: it is exactly the class of failure only a real runner finds, which is the
+  argument for the check being in CI rather than in a note.
+- **And it cost two passes for a second reason:** the step filtered the build log for `error:` alone, so the first
+  failure's annotation named only clang's summary line. The pattern now carries `Undefined symbols`, `referenced from`
+  and `ld:` as well — the same lesson the app's build step had already learned.
