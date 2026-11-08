@@ -127,8 +127,22 @@ jobs:
           # An ad-hoc signature is enough for the out-of-process AU host to load it here; distribution signing,
           # notarisation and the VST3 validator are card 8.9.
           codesign --force --sign - "$COMPONENTS/pump BOARD.component"
+          # What the bundle says it is. If these codes disagree with the auval line below, CMakeLists.txt is wrong and
+          # the message to look at is this one, not the one auval prints.
+          /usr/libexec/PlistBuddy -c "Print :AudioComponents" "$COMPONENTS/pump BOARD.component/Contents/Info.plist" || true
+          # A component copied into place a moment ago is not necessarily in the AudioComponent registry yet, and
+          # auval then reports "didn't find the component" for a plugin that is perfectly good. Force a rescan first.
+          killall -9 AudioComponentRegistrar 2>/dev/null || true
+          auval -a > /dev/null 2>&1 || true
           # aumf: AU_MAIN_TYPE is a MusicEffect. Subtype and manufacturer are the plugin codes in CMakeLists.txt.
-          auval -v aumf Pb01 Wake 2>&1 | tee auval.log || {
-            grep -E "FAILED|ERROR|Error|error" auval.log | head -15 | while IFS= read -r line; do echo "::error title=auval::${line}"; done
-            tail -40 auval.log
-            exit 1; }
+          if ! auval -v aumf Pb01 Wake > auval.log 2>&1; then
+            sleep 3
+            if ! auval -v aumf Pb01 Wake > auval.log 2>&1; then
+              grep -E "FAILED|ERROR|Error|error|didn't find" auval.log | head -15 | while IFS= read -r line; do echo "::error title=auval::${line}"; done
+              echo '--- components the registry does know about:'
+              auval -a 2>&1 | head -40
+              tail -40 auval.log
+              exit 1
+            fi
+          fi
+          tail -5 auval.log
