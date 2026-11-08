@@ -945,3 +945,32 @@ plugin in its own CI job.
   ownership as an argument to `observe` plus a per-instance flag — which needs a member and a setter on
   `BoardProcessor`, a header stamped "SCAFFOLD — fixed interface. Do not change without review." Left alone rather
   than changed quietly; say the word and it is a four-file change.
+
+## 2026-11-08 — card 8.9, the half that needs no developer account
+- What: the `plugin` CI job now checks the VST3 bundle and packages both formats as `pump-BOARD-plugin-mac-arm64.zip`
+  (both bundles at the top level plus `WHERE TO PUT THESE.txt`), and a new `publish-plugin` job publishes that zip as
+  its own **plugin-latest** release on a push to `main`. `README.md` gained a "Download the plugin" section with the
+  install and quarantine commands.
+- Why a separate release rather than a second asset on `latest`: the plan's check is that the app's release asset is
+  unchanged, and someone downloading "latest" for the app should not get a zip of two bundles they did not ask for.
+  Two releases also mean the plugin can fail to build or publish without touching the app's download at all, which is
+  the same "additional software" rule the job split already follows.
+- Why the VST3 check looks at the bundle instead of running a validator: no VST3 validator is available here. The VST3
+  SDK's own validator is not vendored (JUCE ships only the manifest helper), and the usual third-party one would mean
+  fetching a binary from another company — the house rule in `PROMPT_SYSTEM.md` forbids naming other companies'
+  products anywhere, and a CI step that downloads one is that rule's plainest violation. So the job asserts the three
+  files a host opens (`Contents/MacOS/pump BOARD`, `Contents/Info.plist`, `Contents/Resources/moduleinfo.json`) and
+  that the manifest names the plugin, the vendor and the `Fx` category. That catches the failure that actually bites:
+  a bundle missing its manifest builds green and then lists as nothing in a host.
+- Deviation, still owed: the plan's "strict third-party plugin validator passes" is therefore **not** met, and
+  `README.md` says so rather than implying it. The way to close it without the house-rule conflict is to vendor the
+  VST3 SDK's validator as a build target from a pinned commit — an owner decision about a new dependency, not
+  something to slip into a CI file.
+- Not done, and waiting on the same thing as the app: signing and notarisation. Both jobs still produce unsigned
+  bundles and say so in the release notes and the install note. When a developer account exists, the signing steps
+  belong in the same two jobs, for both products at once.
+- Verified: CI run 24 on `40d790a` (the commit before this one) completed **success** in both jobs, so the
+  `BoardContent` destructor change and the macro-name fix are confirmed by a real build and the full suite rather than
+  only by a parse. The packaging and publishing steps cannot be run on this Linux machine: the packaging step's first
+  real run is the next CI push, and the publish job only runs on `main`, so its first execution is whenever this
+  reaches `main`.

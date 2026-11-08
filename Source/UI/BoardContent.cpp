@@ -168,6 +168,21 @@ BoardContent::BoardContent (HostServices& hostIn, BoardProcessor& processorIn, P
 
 BoardContent::~BoardContent()
 {
+    // Card 4.3: a load that is still waiting on the bypass fade has to land here. The working copy below is written
+    // from the live chain, so leaving the swap pending would save the chain the user was replacing and leave the board
+    // bypassed with nothing left to unbypass it: the window that would have done that is the one closing. The timer
+    // path is the same one used here, and it cannot run again because the swap is taken before it is called
+    // (CodeRabbit, PR #2).
+    if (pendingSwap != nullptr)
+    {
+        auto swap = std::move (pendingSwap);
+        pendingSwap = nullptr;
+        swap();
+
+        if (boardBypassIndex != ParameterRegistry::kInvalid)
+            registry.set (boardBypassIndex, 0.0f);
+    }
+
     // Card 4.3: the working copy is what the next launch opens, macros and mappings included. A plugin has none.
     if (hasWorkingCopy())
         saveWorkingBoard();

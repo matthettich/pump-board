@@ -151,3 +151,86 @@ jobs:
             fi
           fi
           tail -5 auval.log
+
+      # Card 8.9: the AU has a validator that ships with the OS; VST3 has none here, so this checks the three files a
+      # host actually opens. A bundle whose moduleinfo.json is missing is not a build failure — it is a plugin some
+      # hosts list as nothing at all — which is why it is checked rather than assumed.
+      - name: Check the VST3 bundle
+        run: |
+          set -o pipefail
+          VST3=$(find build/PumpBoardPlugin_artefacts -maxdepth 4 -name "pump BOARD.vst3" | head -1)
+          for part in "Contents/MacOS/pump BOARD" "Contents/Info.plist" "Contents/Resources/moduleinfo.json"; do
+            test -e "$VST3/$part" || { echo "::error title=vst3::the bundle is missing $part"; exit 1; }
+          done
+          # What the host files it under, taken from the same manifest a host reads.
+          for word in "pump BOARD" wake Fx; do
+            grep -q "$word" "$VST3/Contents/Resources/moduleinfo.json" || { echo "::error title=vst3::moduleinfo does not say $word"; exit 1; }
+          done
+          file "$VST3/Contents/MacOS/pump BOARD"
+          echo '--- moduleinfo.json, first 300 bytes:'
+          head -c 300 "$VST3/Contents/Resources/moduleinfo.json"; echo
+
+      # Card 8.9: both formats in one zip with the note that says where they go. The app's zip is built by its own job
+      # and is not touched here: additional software, in its own archive, on its own release below.
+      - name: Package the plugin
+        run: |
+          set -o pipefail
+          STAGE="$GITHUB_WORKSPACE/plugin-package"
+          rm -rf "$STAGE"; mkdir -p "$STAGE"
+          VST3=$(find build/PumpBoardPlugin_artefacts -maxdepth 4 -name "pump BOARD.vst3" | head -1)
+          AU=$(find build/PumpBoardPlugin_artefacts -maxdepth 4 -name "pump BOARD.component" | head -1)
+          ditto "$VST3" "$STAGE/pump BOARD.vst3"
+          ditto "$AU" "$STAGE/pump BOARD.component"
+          cat > "$STAGE/WHERE TO PUT THESE.txt" <<'NOTE'
+          pump BOARD - the plugin build (VST3 and Audio Unit)
+          Apple silicon Mac, unsigned.
+
+          Put these where the Mac keeps plugins:
+
+            pump BOARD.vst3       ->  ~/Library/Audio/Plug-Ins/VST3
+            pump BOARD.component  ->  ~/Library/Audio/Plug-Ins/Components
+
+          Or in /Library/Audio/Plug-Ins/... to install it for every account on the Mac.
+
+          It is not signed, so the Mac may refuse to load it until the quarantine flag is gone. For each bundle,
+          in Terminal:
+
+            xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/VST3/"pump BOARD.vst3"
+            xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/Components/"pump BOARD.component"
+
+          This is additional software, not a replacement: the pump BOARD app is a separate download, and neither
+          overwrites the other. Boards saved in the app open here. The plugin keeps its board inside the project
+          that loaded it and never writes the app's working copy.
+          NOTE
+          # No --keepParent: the two bundles are the top level of the archive, which is what the note above describes.
+          ditto -c -k --sequesterRsrc "$STAGE" "$GITHUB_WORKSPACE/pump-BOARD-plugin-mac-arm64.zip"
+          unzip -l "$GITHUB_WORKSPACE/pump-BOARD-plugin-mac-arm64.zip" | tail -5
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pump-BOARD-plugin-mac-arm64
+          path: pump-BOARD-plugin-mac-arm64.zip
+
+  # Card 8.9: the plugin gets its own release, so the app's "latest" keeps exactly the one asset it has always had.
+  # Publishing is a write, so it is its own job and main only, like the app's.
+  publish-plugin:
+    needs: plugin
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: pump-BOARD-plugin-mac-arm64
+
+      - name: Publish as the "plugin-latest" release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release delete plugin-latest --yes --cleanup-tag || true
+          gh release create plugin-latest pump-BOARD-plugin-mac-arm64.zip \
+            --title "Latest plugin build ($(date -u +%Y-%m-%d) ${GITHUB_SHA::7})" \
+            --notes "pump BOARD as VST3 and AU, built from ${GITHUB_SHA} on Apple silicon. Unsigned: read WHERE TO PUT THESE.txt in the zip." \
+            --target "$GITHUB_SHA"
