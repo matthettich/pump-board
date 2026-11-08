@@ -122,7 +122,9 @@ if(APPLE)
         ${PB_VST3_SDK}/public.sdk/source/common/threadchecker_mac.mm
         ${PB_VST3_SDK}/public.sdk/source/common/systemclipboard_mac.mm
         PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
+    # Cocoa for AppKit, Foundation for the Core Foundation bridging the bundle loader uses.
     find_library(PB_COCOA_FRAMEWORK Cocoa REQUIRED)
+    find_library(PB_FOUNDATION_FRAMEWORK Foundation REQUIRED)
 elseif(WIN32)
     list(APPEND PB_VST3_SDK_SOURCES
         ${PB_VST3_SDK}/public.sdk/source/vst/hosting/module_win32.cpp
@@ -148,7 +150,11 @@ set_target_properties(PumpBoardVst3Validator PROPERTIES
 target_compile_definitions(PumpBoardVst3Validator PRIVATE
     $<IF:$<CONFIG:Debug>,DEVELOPMENT=1,RELEASE=1>)
 if(APPLE)
-    target_link_libraries(PumpBoardVst3Validator PRIVATE ${PB_COCOA_FRAMEWORK})
+    target_link_libraries(PumpBoardVst3Validator PRIVATE ${PB_COCOA_FRAMEWORK} ${PB_FOUNDATION_FRAMEWORK})
+    # Link through the Objective-C++ driver. CMake's default here is the C++ driver, which does not add the
+    # Objective-C runtime the two bridging sources need, and the failure it produces is a wall of undefined symbols
+    # that says nothing about the cause. This is why the target failed to link the first time it ran.
+    set_target_properties(PumpBoardVst3Validator PROPERTIES LINKER_LANGUAGE OBJCXX)
 elseif(NOT WIN32)
     target_link_libraries(PumpBoardVst3Validator PRIVATE ${CMAKE_DL_LIBS})
 endif()

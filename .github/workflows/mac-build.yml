@@ -194,7 +194,11 @@ jobs:
           set -o pipefail
           cmake -S tools/vst3-validator -B validator-build -G Ninja -DCMAKE_BUILD_TYPE=Release 2>&1 | tail -15
           cmake --build validator-build 2>&1 | tee validator-build.log || {
-            grep -E "error:|FAILED" validator-build.log | head -20 | while IFS= read -r line; do echo "::error title=validator build::${line}"; done
+            # Same rule as the app's build step: the line that names the symbol does not say "error:", so the
+            # pattern covers what clang and ld actually print. Annotations are the only part of a run readable
+            # without a token, so the diagnosis has to travel in them.
+            grep -E "error:|FAILED|Undefined symbols|referenced from|duplicate symbol|^ld: |symbol\\(s\\) not found" validator-build.log | head -30 | while IFS= read -r line; do echo "::error title=validator build::${line}"; done
+            tail -30 validator-build.log
             exit 1; }
           # A validator that cannot pass its own tests would report failures for a good plugin, so prove it first.
           ./validator-build/PumpBoardVst3Validator -selftest | tail -3
