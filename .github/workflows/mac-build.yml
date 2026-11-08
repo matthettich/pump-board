@@ -40,7 +40,9 @@ jobs:
           set -o pipefail
           cmake --build build --target PumpBoard PumpBoardTests 2>&1 | tee build.log || {
             # Annotations are readable through the API even where the logs are not: send the errors there.
-            grep -E "error:|Error|FAILED" build.log | head -15 | while IFS= read -r line; do echo "::error title=build::${line}"; done
+            # Linker output does not say "error:" on the line that names the symbol, so the pattern covers the
+            # shapes clang and ld actually print. Annotations are readable through the API where logs are not.
+            grep -E "error:|Undefined symbols|referenced from|duplicate symbol|^ld: |Error|FAILED" build.log | head -20 | while IFS= read -r line; do echo "::error title=build::${line}"; done
             exit 1; }
 
       - name: Run tests
@@ -105,7 +107,7 @@ jobs:
         run: |
           set -o pipefail
           cmake --build build --target PumpBoardPlugin_VST3 PumpBoardPlugin_AU 2>&1 | tee plugin.log || {
-            grep -E "error:|Error|FAILED" plugin.log | head -15 | while IFS= read -r line; do echo "::error title=plugin build::${line}"; done
+            grep -E "error:|Undefined symbols|referenced from|duplicate symbol|^ld: |Error|FAILED" plugin.log | head -20 | while IFS= read -r line; do echo "::error title=plugin build::${line}"; done
             exit 1; }
           # Do not trust the artefact layout: find what the build actually produced.
           for kind in "pump BOARD.vst3" "pump BOARD.component"; do
