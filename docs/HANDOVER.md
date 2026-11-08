@@ -139,7 +139,8 @@ guessing at interaction quality from code.
 ## What still needs doing (8 Nov 2026)
 
 Written after a clean rebuild and the first look at the running window on this Mac. Ordered by what it costs to
-leave undone. The lists further down — "Still open" and "Decisions still open" — are unchanged and still current.
+leave undone. The lists further down — "Still open" and "Decisions still open" — are unchanged; they were not
+re-audited for this pass, so treat their detail as of 6 Nov and this section as of 8 Nov.
 
 ### 1. The hand-test pass. Nothing has been driven
 
