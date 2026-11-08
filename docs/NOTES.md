@@ -919,3 +919,29 @@ plugin in its own CI job.
   job as fixing the checklist, and a stale record that says when it was written is better than a quietly edited
   one.
 - Not verified: none of these 21 tests has been run. This edit makes the checklist followable, not passing.
+
+## 2026-11-08 — CodeRabbit on cards 8.4–8.6: the pause, and what its review changed
+- What: `.coderabbit.yaml` now sets `reviews.auto_review.auto_pause_after_reviewed_commits: 0`. CodeRabbit paused PR #2
+  after five commits since its last review (`4d562fc`), which is why the later commits sat unreviewed.
+- Why: that setting is the only lever reachable without a write token — otherwise it takes `@coderabbitai resume` as a
+  PR comment, and this machine has no authenticated GitHub access (no `gh` login, no token in the environment). A push
+  does not lift a pause that has already happened: CodeRabbit re-scanned `9e51d5d`, moved its "latest commit, not
+  reviewed" line to it, and stayed paused. The config stops the next pause, not this one.
+- What its review of 8.4/8.5 changed: `MainWindow::buildContent` clears the old content before constructing the new one
+  (the old destructor was clearing the callbacks the new one had just set, which killed learn captures, preset keys and
+  the mappings view after a reskin); `afterBoardRestored` asks for `updateHostDisplay` when `refreshChain` reports a
+  change, because the signature it records would otherwise leave the host's generic editor stale; `refreshChain` writes
+  each macro's current name onto its parameter, falling back to `Macro N` when a rename is cleared, instead of only
+  hashing the name; the plugin editor hands `repointSlot` to the message thread, because a host may restore state from
+  a thread of its own; and `BoardContent`'s destructor lands a swap still waiting on the bypass fade before it writes
+  the working copy, so a load is not lost and the board does not reopen bypassed.
+- Also fixed: the publish job sets `GH_REPO`, because it downloads the artifact without a checkout and `gh` otherwise
+  has no repository to infer for `gh release`.
+- Verified: `g++ -std=c++20 -fsyntax-only -Wall -Wextra -Werror` (Release and `-DPB_ALLOCATION_GUARD=1`) on every touched
+  source. Not verified: the build and the tests — this machine is Linux, so CI is the first real run.
+- Open question for review: `pb::clock`'s state, tempo ownership included, is one file-scope struct, so two plugin
+  instances share both the measurement and the "the host owns the tempo" flag (card 8.6). The flag is set and read in
+  the same block, so the window is a host processing two instances on two threads rather than ordinary use. The fix is
+  ownership as an argument to `observe` plus a per-instance flag — which needs a member and a setter on
+  `BoardProcessor`, a header stamped "SCAFFOLD — fixed interface. Do not change without review." Left alone rather
+  than changed quietly; say the word and it is a four-file change.
