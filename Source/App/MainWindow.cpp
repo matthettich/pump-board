@@ -1127,7 +1127,26 @@ private:
         LoadResult result;
 
         if (! presetManager.read (workingBoardFile(), data, result))
+        {
+            // A file that is there but cannot be read (damaged, or saved by a newer build) would be overwritten by the
+            // next autosave, whatever the app starts with instead. Keep it first, and say so.
+            if (workingBoardFile().existsAsFile())
+            {
+                const auto kept = pb::setAsideUnreadable (workingBoardFile());
+                const auto reason = result.error.isNotEmpty() ? result.error : juce::String ("the file could not be read");
+
+                juce::Logger::writeToLog ("pump BOARD: could not read the last board (" + reason + "); "
+                                          + (kept.existsAsFile() ? "kept as " + kept.getFullPathName() : juce::String ("not kept")));
+
+                juce::StringArray problem;
+                problem.add (reason);
+                problem.add (kept.existsAsFile() ? "The file was kept as " + kept.getFileName() + " beside it."
+                                                 : juce::String ("It could not be kept, and will be replaced."));
+                showWarnings (problem, "THE LAST BOARD COULD NOT BE READ");
+            }
+
             return false;
+        }
 
         const auto applied = pb::apply (data, model, macros, learn, registry);
 

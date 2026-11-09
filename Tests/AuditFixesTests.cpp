@@ -225,6 +225,34 @@ public:
             learn.cancelLearn();
         }
 
+        beginTest ("a working board that cannot be read is set aside, not overwritten");
+        {
+            const auto directory = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                                       .getChildFile ("pump-board-audit-aside");
+            directory.deleteRecursively();
+            directory.createDirectory();
+
+            const auto working = directory.getChildFile ("current.board");
+            expect (working.replaceWithText ("{ \"schemaVersion\": 99, \"slots\": [] }"));
+
+            const auto kept = pb::setAsideUnreadable (working);
+
+            expect (kept.existsAsFile());
+            expectEquals (kept.loadFileAsString(), juce::String ("{ \"schemaVersion\": 99, \"slots\": [] }"));
+            expect (! working.existsAsFile(), "the app is free to write a fresh working copy");
+
+            // A second failure keeps its own copy rather than replacing the first.
+            expect (working.replaceWithText ("not json"));
+            const auto keptAgain = pb::setAsideUnreadable (working);
+            expect (keptAgain.existsAsFile() && keptAgain != kept);
+            expect (kept.existsAsFile());
+
+            // Nothing there: nothing to keep.
+            expect (pb::setAsideUnreadable (directory.getChildFile ("missing.board")) == juce::File());
+
+            directory.deleteRecursively();
+        }
+
     }
 };
 
