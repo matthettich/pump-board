@@ -104,6 +104,59 @@ public:
             expect (! pb::clock::isRunning());
         }
 
+        beginTest ("with no device running, retired chains are freed at once rather than never");
+        {
+            // Blocks are what retire a snapshot, so with the device stopped (or never started) nothing ever advanced
+            // the counter: every board load kept the old board's slots, and their params, alive for good.
+            pb::ParameterRegistry registry;
+            pb::MidiRouter router (registry);
+            pb::BoardProcessor processor (registry, router);
+            pb::EffectRegistry effects;
+            pb::registerBuiltInEffects (effects);
+            pb::BoardModel model (processor, effects, registry);
+
+            processor.prepareToPlay (48000.0, 64);
+            expect (model.insert (0, "pump.tube"));
+
+            const auto id = "slot/" + model.at (0)->getUid() + "/on";
+            expect (registry.find (id) != pb::ParameterRegistry::kInvalid);
+
+            processor.releaseResources();                     // the device stops
+            model.clear();
+            processor.collectGarbage();
+
+            expect (registry.find (id) == pb::ParameterRegistry::kInvalid,
+                    "the cleared slot is released although no block has run since");
+        }
+
+        beginTest ("a device that is running still holds a retired chain for two blocks");
+        {
+            pb::ParameterRegistry registry;
+            pb::MidiRouter router (registry);
+            pb::BoardProcessor processor (registry, router);
+            pb::EffectRegistry effects;
+            pb::registerBuiltInEffects (effects);
+            pb::BoardModel model (processor, effects, registry);
+
+            processor.prepareToPlay (48000.0, 64);
+            expect (model.insert (0, "pump.tube"));
+            const auto id = "slot/" + model.at (0)->getUid() + "/on";
+
+            juce::AudioBuffer<float> buffer (2, 64);
+            juce::MidiBuffer midi;
+            buffer.clear();
+            processor.processBlock (buffer, midi);
+
+            model.clear();
+            processor.collectGarbage();
+            expect (registry.find (id) != pb::ParameterRegistry::kInvalid, "still inside the two-block window");
+
+            processor.processBlock (buffer, midi);
+            processor.processBlock (buffer, midi);
+            processor.collectGarbage();
+            expect (registry.find (id) == pb::ParameterRegistry::kInvalid);
+        }
+
     }
 };
 
