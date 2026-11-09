@@ -64,6 +64,31 @@ public:
             processor.setPlayHead (nullptr);
         }
 
+        beginTest ("a steady host tempo is written once, not on every block");
+        {
+            pb::PluginProcessor processor;
+            FixedTempoPlayHead playHead (133.0);
+            processor.setPlayHead (&playHead);
+            processor.prepareToPlay (48000.0, 64);
+
+            juce::AudioBuffer<float> buffer (2, 64);
+            buffer.clear();
+            juce::MidiBuffer midi;
+
+            processor.processBlock (buffer, midi);                         // the first block carries the tempo in
+            const auto counter = processor.getSession().getRegistry().changeCounter();
+
+            for (int i = 0; i < 5; ++i)
+                processor.processBlock (buffer, midi);
+
+            // The registry's change counter is what the editor reads to mark a board as edited. A tempo written
+            // again on every block moves it on every block, so a board just loaded from a preset was starred as
+            // modified a few milliseconds later.
+            expectEquals ((int) processor.getSession().getRegistry().changeCounter(), (int) counter);
+
+            processor.setPlayHead (nullptr);
+        }
+
         beginTest ("a running MIDI clock does not fight a host tempo");
         {
             pb::clock::reset();

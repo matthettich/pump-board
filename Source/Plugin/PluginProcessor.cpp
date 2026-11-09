@@ -1,6 +1,7 @@
 #include "Plugin/PluginProcessor.h"
 #include "Plugin/PluginEditor.h"
 #include "Control/MidiClock.h"
+#include <cmath>
 
 namespace pb
 {
@@ -224,8 +225,15 @@ bool PluginProcessor::updateHostTempo()
         {
             if (const auto bpm = position->getBpm())
             {
-                if (tempoIndex != ParameterRegistry::kInvalid)
-                    session.getRegistry().set (tempoIndex, (float) juce::jlimit (20.0, 300.0, *bpm));
+                // Only when it moved: set() bumps the registry's change counter, which the editor reads as "the
+                // board was edited". Written on every block it kept a freshly loaded preset starred.
+                if (tempoIndex != ParameterRegistry::kInvalid && std::isfinite (*bpm))
+                {
+                    const auto hostTempo = (float) juce::jlimit (20.0, 300.0, *bpm);
+
+                    if (std::abs (session.getRegistry().get (tempoIndex) - hostTempo) > 1.0e-4f)
+                        session.getRegistry().set (tempoIndex, hostTempo);
+                }
 
                 // The host owns the board's tempo while it reports one. A MIDI clock on the same block keeps
                 // measuring, but must not overwrite what the host just said (card 8.6).
