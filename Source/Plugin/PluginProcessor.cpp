@@ -78,6 +78,11 @@ void PluginProcessor::releaseResources()
 {
     stopTimer();
     session.getProcessor().releaseResources();
+
+    // The timer was what would have landed a restore that is still waiting out its fade, and there is no audio left to
+    // fade: land it now, or the board stays bypassed and the project's board is never applied until some later
+    // prepareToPlay.
+    landPendingState();
 }
 
 void PluginProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
@@ -99,7 +104,19 @@ juce::AudioProcessorEditor* PluginProcessor::createEditor()
 
 void PluginProcessor::getStateInformation (juce::MemoryBlock& destination)
 {
-    const auto json = juce::JSON::toString (session.captureState(), false);
+    // A restore that is waiting behind its fade has been accepted already, so it is the state: a host that saves right
+    // after loading (an undo point, a preset store) must get it back, not the board it is about to replace.
+    juce::var state;
+
+    {
+        const juce::ScopedLock lock (pendingLock);
+        state = pendingState;
+    }
+
+    if (state.isVoid())
+        state = session.captureState();
+
+    const auto json = juce::JSON::toString (state, false);
     destination.replaceAll (json.toRawUTF8(), (size_t) json.getNumBytesAsUTF8());
 }
 
@@ -119,12 +136,29 @@ void PluginProcessor::setStateInformation (const void* data, int sizeInBytes)
 
 void PluginProcessor::beginStateRestore (const juce::var& state)
 {
+    // A state that will not read is refused here, before anything is bypassed for it: the fade below would otherwise
+    // dip the board for a restore that then applies nothing.
+    if (! session.canRestoreState (state))
+        return;
+
     // No audio is running (a host usually restores before prepareToPlay), so there is nothing to click and the swap
-    // can land at once.
+    // can land at once. A restore still waiting from earlier is older than this one and is dropped, not landed on top
+    // of it afterwards.
     if (! isTimerRunning())
     {
+        bool unbypass = false;
+
+        {
+            const juce::ScopedLock lock (pendingLock);
+            unbypass = ! pendingState.isVoid() && pendingStateUnbypass;
+            pendingState = juce::var();
+        }
+
         if (session.restoreState (state))
             afterBoardRestored();
+
+        if (unbypass)
+            setBoardBypassedQuietly (false);
 
         return;
     }
@@ -132,15 +166,53 @@ void PluginProcessor::beginStateRestore (const juce::var& state)
     // Otherwise the board's own bypass smoother is the fade: bypass, swap, unbypass. A second restore while one is
     // waiting replaces the first, as two quick program changes do in the app — but it must not take the bypass state
     // over: the board was bypassed for the first restore, so reading it again would record "leave it bypassed" and
-    // the board would never come back (CodeRabbit, PR #2).
-    const bool alreadyWaiting = ! pendingState.isVoid();
-    pendingState = state;
-    pendingStateDueMs = juce::Time::currentTimeMillis() + kStateFadeMs;
+    // the board would never come back (review, PR #2).
+    {
+        // A host may restore from a thread of its own while the timer reads these on the message thread.
+        const juce::ScopedLock lock (pendingLock);
 
-    if (! alreadyWaiting)
-        pendingStateUnbypass = ! session.isBoardBypassed();
+        const bool alreadyWaiting = ! pendingState.isVoid();
+        pendingState = state;
+        pendingStateDueMs = juce::Time::currentTimeMillis() + kStateFadeMs;
 
-    session.setBoardBypassed (true);
+        if (! alreadyWaiting)
+            pendingStateUnbypass = ! session.isBoardBypassed();
+    }
+
+    setBoardBypassedQuietly (true);
+}
+
+void PluginProcessor::landPendingState()
+{
+    juce::var state;
+    bool unbypass = false;
+
+    {
+        const juce::ScopedLock lock (pendingLock);
+
+        if (pendingState.isVoid())
+            return;
+
+        state = std::move (pendingState);
+        pendingState = juce::var();
+        unbypass = pendingStateUnbypass;
+    }
+
+    if (session.restoreState (state))
+        afterBoardRestored();
+
+    if (unbypass)
+        setBoardBypassedQuietly (false);
+}
+
+void PluginProcessor::setBoardBypassedQuietly (bool bypassed)
+{
+    // The fade around a restore is this plugin's own doing. Left to the poll, the host would be told "Board Bypass
+    // moved" twice for every restore, and a host in a write mode would record both as automation.
+    session.setBoardBypassed (bypassed);
+
+    if (auto* parameter = parameters.find ("board/bypass"))
+        parameter->resync();
 }
 
 void PluginProcessor::timerCallback()
@@ -170,18 +242,14 @@ void PluginProcessor::timerCallback()
         setLatencySamples (latency);
     }
 
-    if (pendingState.isVoid() || juce::Time::currentTimeMillis() < pendingStateDueMs)
-        return;
+    {
+        const juce::ScopedLock lock (pendingLock);
 
-    auto state = std::move (pendingState);
-    pendingState = juce::var();
-    const bool unbypass = pendingStateUnbypass;
+        if (pendingState.isVoid() || juce::Time::currentTimeMillis() < pendingStateDueMs)
+            return;
+    }
 
-    if (session.restoreState (state))
-        afterBoardRestored();
-
-    if (unbypass)
-        session.setBoardBypassed (false);
+    landPendingState();
 }
 
 void PluginProcessor::afterBoardRestored()

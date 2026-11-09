@@ -33,6 +33,44 @@ void ensureBuiltInEffects()
             registerBuiltInEffects (registry);
     });
 }
+
+// Why a state would be refused, or an empty string when it reads. Nothing is applied: this is the whole of the
+// checking, shared by restoreState() and by canRestoreState(), so the two cannot disagree about what is acceptable.
+juce::String readState (const juce::var& state, BoardData& data, juce::var& tempo)
+{
+    auto* object = state.getDynamicObject();
+
+    if (object == nullptr)
+        return "the state is not an object";
+
+    if (object->getProperty (kStateFormatKey).toString() != kStateFormat)
+        return "the state belongs to something else: '" + object->getProperty (kStateFormatKey).toString() + "'";
+
+    const auto version = object->getProperty (kStateVersionKey);
+
+    if (! (version.isInt() || version.isInt64() || version.isDouble()))
+        return "the state has no version";
+
+    // Exactly this build's version. An older one has no reader yet, and a newer one was written by a build that knew
+    // more than this one: half-applying it would keep the pedals and lose whatever it added. Compared as a double:
+    // a version written as 1e300 must not be cast to an int on its way to being refused.
+    if ((double) version != (double) kStateVersion)
+        return "the state is version " + juce::String ((double) version) + ", and this build writes "
+               + juce::String (kStateVersion);
+
+    const auto boardText = object->getProperty (kStateBoardKey).toString();
+
+    if (boardText.isEmpty())
+        return "the state holds no board";
+
+    const auto parsed = fromJson (boardText, data);
+
+    if (! parsed.ok)
+        return "the board in the state did not read: " + parsed.error;
+
+    tempo = object->getProperty (kStateTempoKey);
+    return {};
+}
 } // namespace
 
 PluginSession::PluginSession()
@@ -98,6 +136,15 @@ juce::var PluginSession::captureState() const
     return juce::var (state);
 }
 
+bool PluginSession::canRestoreState (const juce::var& state)
+{
+    BoardData data;
+    juce::var tempo;
+
+    lastRestoreError = readState (state, data, tempo);
+    return lastRestoreError.isEmpty();
+}
+
 bool PluginSession::restoreState (const juce::var& state)
 {
     // Card 8.3: a host only ever sees the bool, which says nothing about why its project's state was dropped. The
@@ -108,40 +155,14 @@ bool PluginSession::restoreState (const juce::var& state)
         return false;
     };
 
-    lastRestoreError.clear();
-
-    auto* object = state.getDynamicObject();
-
-    if (object == nullptr)
-        return refuse ("the state is not an object");
-
-    if (object->getProperty (kStateFormatKey).toString() != kStateFormat)
-        return refuse ("the state belongs to something else: '"
-                       + object->getProperty (kStateFormatKey).toString() + "'");
-
-    const auto version = object->getProperty (kStateVersionKey);
-
-    if (! (version.isInt() || version.isDouble()))
-        return refuse ("the state has no version");
-
-    // Exactly this build's version. An older one has no reader yet, and a newer one was written by a build that knew
-    // more than this one: half-applying it would keep the pedals and lose whatever it added.
-    if ((int) version != kStateVersion)
-        return refuse ("the state is version " + juce::String ((int) version) + ", and this build writes "
-                       + juce::String (kStateVersion));
-
-    const auto boardText = object->getProperty (kStateBoardKey).toString();
-
-    if (boardText.isEmpty())
-        return refuse ("the state holds no board");
-
     // Parse before touching anything: a board that will not read leaves the current one exactly as it was.
     BoardData data;
+    juce::var tempo;
 
-    const auto parsed = fromJson (boardText, data);
+    if (const auto reason = readState (state, data, tempo); reason.isNotEmpty())
+        return refuse (reason);
 
-    if (! parsed.ok)
-        return refuse ("the board in the state did not read: " + parsed.error);
+    lastRestoreError.clear();
 
     const auto applied = apply (data, model, macros, learn, registry);
 
@@ -149,7 +170,6 @@ bool PluginSession::restoreState (const juce::var& state)
         return refuse ("the board read but could not be applied: " + applied.error);
 
     const int tempoIndex = registry.find (kStateTempoId);
-    const auto tempo = object->getProperty (kStateTempoKey);
 
     // The registry clamps to the parameter's own range, so a nonsense BPM in a project file cannot reach the clock.
     if (tempoIndex != ParameterRegistry::kInvalid && (tempo.isInt() || tempo.isDouble()))
