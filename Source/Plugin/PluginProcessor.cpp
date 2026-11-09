@@ -146,6 +146,11 @@ void PluginProcessor::timerCallback()
 {
     session.collectGarbage();
 
+    // A macro moved by the host's automation or by a mapped controller writes its targets here, and nowhere else:
+    // MacroBank::update() is only ever called from a timer, and the editor's is the only other one. Without this a
+    // host lane on macro/N did nothing whenever the window was closed, which is when automation is played.
+    session.getMacros().update();
+
     // Card 8.4: the slot switches follow the chain, and a value that moved in the board is announced to the host
     // exactly once. Both are message-thread work, which is what hosts require for names and gestures.
     if (parameters.refreshChain())

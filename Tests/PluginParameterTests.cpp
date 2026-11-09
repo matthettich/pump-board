@@ -21,6 +21,27 @@ public:
     int changes = 0;
 };
 
+// The processor's own 30 Hz timer does the board's message-thread work (macros, garbage, parameter polling), and
+// nothing pumps timers while a test thread sleeps: run what is due until the condition holds, with a deadline.
+template <typename Predicate>
+bool pumpTimersUntil (Predicate&& condition, int timeoutMs = 2000)
+{
+    const auto deadline = juce::Time::currentTimeMillis() + timeoutMs;
+
+    for (;;)
+    {
+        juce::Timer::callPendingTimersSynchronously();
+
+        if (condition())
+            return true;
+
+        if (juce::Time::currentTimeMillis() >= deadline)
+            return false;
+
+        juce::Thread::sleep (5);
+    }
+}
+
 pb::PluginParameter* parameterFor (pb::PluginProcessor& processor, const juce::String& paramId)
 {
     return processor.getAutomation().find (paramId);
@@ -146,6 +167,32 @@ public:
             auto* slotZero = parameterFor (processor, "slot/0/on");
             expectEquals (slotZero->getRegistryIndex(), model.at (0)->onParamIndex());
             expect (slotZero->getRegistryIndex() != movedSwitch);
+        }
+
+        beginTest ("a macro moved by the host reaches its targets with no editor open");
+        {
+            pb::PluginProcessor processor;
+            processor.prepareToPlay (48000.0, 64);
+
+            auto& session = processor.getSession();
+            auto& registry = session.getRegistry();
+            const auto& indices = session.getModel().at (0)->paramIndices();
+            expect (! indices.empty());
+
+            const int target = indices[0];
+            const auto& info = registry.info (target);
+
+            pb::MacroBank::Target macroTarget;
+            macroTarget.paramIndex = target;
+            macroTarget.minValue = info.minValue;
+            macroTarget.maxValue = info.maxValue;
+            session.getMacros().setTargets (0, { macroTarget });
+
+            // Nothing here builds an editor, so nothing but the processor's own timer can run MacroBank::update().
+            parameterFor (processor, "macro/0")->setValueNotifyingHost (1.0f);
+
+            expect (pumpTimersUntil ([&] { return std::abs (registry.get (target) - info.maxValue) < 1.0e-3f; }),
+                    "the macro moved but its target stayed at " + juce::String (registry.get (target)));
         }
 
         beginTest ("a full automation pass allocates nothing");
