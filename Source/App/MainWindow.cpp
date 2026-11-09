@@ -1258,7 +1258,7 @@ private:
             const float boardLoad = pb::load::boardLoad();
 
             if (boardLoad > 0.005f)
-                text << "    LOAD " << juce::String (juce::jmin (100.0f, boardLoad * 100.0f), 0) << "%";
+                text << "    LOAD " << juce::roundToInt (juce::jmin (100.0f, boardLoad * 100.0f)) << "%";   // String (x, 0) prints 6 digits
 
             if (engine.isUsingFallback())
                 text << "    FALLBACK";
