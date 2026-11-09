@@ -12,7 +12,7 @@ decision and deviation — read it before changing anything, it is where the tra
   mappings, and the app can be played: sixteen slots, eight macros, MIDI and key mappings, presets with
   program changes, and a measured round trip in Settings. What is left is hand-testing
   (`REVIEW_TEMPLATE.md`) and phases 5–7 (more pedals, custom pedals, the full skin).
-- **Tests:** 3653 expectations in Debug, 0 failing on the plugin branch with main's 9 Nov audit merged in (Linux; the figures below are main's own).
+- **Tests:** 3684 expectations in Debug, 0 failing on the plugin branch (Linux; 3653 before the per-instance clock and host bypass changes; the figures below are main's own).
   Previous run on `main`: 8 Nov 2026 on this Mac, after a clean
   rebuild of all 256 targets with 0 warnings in `Source/` and `Tests/`; the 6 Nov cloud run on Linux
   agrees. That run also caught the one warning the incremental builds had been hiding.
@@ -367,8 +367,9 @@ dated entry at the end of `NOTES.md` first, it has every finding, fixed or left,
   restore. If you add something the editor's `BoardContent::timerCallback` does and the plugin needs while the window is
   shut, it has to be added there too — that is how macros went dead in the first place.
 - **Landmines specific to the plugin:**
-  - `pb::clock` (MIDI clock measurement and the "host owns the tempo" flag) is one process-wide struct; two instances
-    share it. Fix needs a member on a scaffold header; see `NOTES.md` 8 Nov and 9 Nov.
+  - **The MIDI clock is per instance** (since 9 Nov, owner-approved): `pb::MidiClock` is a member of `BoardProcessor`
+    (`getMidiClock()`), not process-wide state. Anything that wants the clock's state asks the processor it cares about;
+    `running`, the measured BPM and host-owns are atomics, the rest is audio-thread-only.
   - `ParameterRegistry::set` bumps `changeCounter()`, which the editor reads as "board edited". Never write a value to the
     registry every block unless it changed.
   - The plugin must never write `~/Music/pump BOARD/current.board` or `settings`. The guard is `HostServices`
@@ -376,15 +377,20 @@ dated entry at the end of `NOTES.md` first, it has every finding, fixed or left,
     writes behind the same two checks. `Boards/` is shared with the app on purpose.
   - `board/bypass` is both a user control and the restore's fade. The plugin adopts its own fade silently
     (`setBoardBypassedQuietly`); an editor-initiated preset swap does not, so a host may record it as automation.
+  - **`board/bypass` is the host's own bypass parameter** (`getBypassParameter()`), so the wrapper calls `processBlock`
+    and never `processBlockBypassed`: a host bypass goes through the board's 10 ms fade and latency-matched dry ring. Do not
+    override `processBlockBypassed`, and do not add a second bypass parameter. The wrapper's own extra `byps` lane no longer exists.
   - A parameter that points at a slot (`slot/N/on`) is re-pointed by `refreshChain()` at 30 Hz, not at the moment the
     chain changes.
-- **Verified on Linux, 9 Nov:** Debug suite 3580 expectations, 0 failed (3562 before the review's tests); `PumpBoardPlugin_VST3`
-  compiles and links in Debug (it yields `pump BOARD.vst3` with `moduleinfo.json`). Release suite (`build-rel`, GCC 13, LTO) 3512 expectations, 0 failed — fewer than Debug because the allocation guard is Debug-only.
+- **Verified on Linux, 9 Nov:** Debug suite 3684 expectations, 0 failed (3653 before the clock and bypass changes, 3580
+  before main's audit was merged in); `PumpBoardPlugin_VST3` compiles and links in Debug (it yields `pump BOARD.vst3` with
+  `moduleinfo.json`). Release suite (`build-rel`, GCC 13, LTO) 3568 expectations, 0 failed — fewer than Debug because the allocation guard is Debug-only.
 - **Not verified by anyone:** the bundle loading in any host; the AU (Linux has no target for it); the VST3 SDK validator
   (the submodule is empty without network); macOS builds of any of the review's commits (the last green CI run, 35, was on `2b19541`); editor drawing or
-  interaction in a host; thread-sanitizer or address-sanitizer runs; two instances in one process.
-- **Decisions still the owner's:** per-instance clock state (scaffold change), universal binary for the plugin (decision 4
-  in `docs/tasks/phase-8.md`; the build is `arm64` only), whether a host's bypass button should map to `board/bypass`.
+  interaction in a host; thread-sanitizer or address-sanitizer runs; two real instances in one host process (the per-instance clock
+  is tested with two `BoardProcessor`s, not two loaded plugins); a host's bypass button driving `board/bypass` (the wrapper's rule was read, not run).
+- **Decisions still the owner's:** universal binary for the plugin (decision 4 in `docs/tasks/phase-8.md`; the build is
+  `arm64` only). (Per-instance clock state and the host bypass mapping were decided on 9 Nov and are done; see `NOTES.md`.)
 
 ## Building on Linux (cloud agents)
 
@@ -495,7 +501,7 @@ judged on the Mac build.
   `prepareToPlay` never did). Blocks are what age a retired chain, so without this a stopped device kept every old
   slot and its params for good.
 - **The audio thread never calls `getMessage()` on a message over three bytes** (it copies, and a SysEx heap-allocates)
-  and never calls `ParameterRegistry::find`: `pb::clock::observe` takes the tempo index from `BoardProcessor`.
+  and never calls `ParameterRegistry::find`: `MidiClock::observe` takes the tempo index from `BoardProcessor`.
 
 ## House rules
 

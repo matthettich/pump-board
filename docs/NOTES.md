@@ -1119,7 +1119,7 @@ files: every difference is the `engine` → `host` indirection, the three contro
 `hasWorkingCopy()` gating, the dialog look-and-feel, or the destructor's callback clearing).
 
 **Found and left, with the reason:**
-- Two plugin instances share `pb::clock`'s state (measurement, `written`, and the plain-`bool` host-owns flag). Same
+- (Done later the same day: see the per-instance clock entry at the end of this file.) Two plugin instances share `pb::clock`'s state (measurement, `written`, and the plain-`bool` host-owns flag). Same
   open question as the 8 Nov entry; the fix needs a member on `BoardProcessor.h`. Added here: if two instances both see
   a MIDI clock, each adds its block length to the shared sample position, so the measured BPM is wrong. I believe VST3 hosts do
   not deliver system real-time bytes to an effect (not checked), which would make it an AU-only worry.
@@ -1143,7 +1143,7 @@ files: every difference is the `engine` → `host` indirection, the three contro
   whole project, and the zip says `arm64`, so the repository is consistent with itself but an Intel host cannot load it.
 - `publish-plugin` deletes the release and then creates it, and `concurrency` cancels in-progress runs per ref: a newer
   push landing between the two steps leaves no `plugin-latest` until the next run.
-- `board/bypass` is not offered as the host's bypass parameter (`getBypassParameter`), so a host's own bypass button
+- (Done later the same day: see the host bypass entry at the end of this file.) `board/bypass` is not offered as the host's bypass parameter (`getBypassParameter`), so a host's own bypass button
   does not go through the board's crossfade or its latency compensation.
 
 **Build and test, exactly:** Debug test target before and after: 3562 → 3580 expectations, 0 failed (the 18 are the new
@@ -1223,3 +1223,60 @@ and 2 of "What still needs doing" (above), decision 2 (choice labels).
   argued from the code only.
 - The 24 adapters' defaults were left to their null tests; `GenericEffectEditor`, `BoardPrototype`, `MappingsView`,
   `PresetLibrary` were read for stale-index and bounds mistakes only.
+
+## 2026-11-09 — per-instance MIDI clock and host bypass (owner-approved, branch review/vst-fixes-2026-11-09)
+Two changes the owner approved after the review above. Local commits only, nothing pushed.
+
+**1. The MIDI clock is per instance.** `pb::clock` (file-scope state, a plain-`bool` host-owns flag) is now the class
+`pb::MidiClock` (`Source/Control/MidiClock.{h,cpp}`), and each `BoardProcessor` owns one, reached through
+`getMidiClock()`.
+- **Scaffold header change, as approved:** `Engine/BoardProcessor.h` gained the `MidiClock midiClock` member, the
+  `getMidiClock()` accessor and the `#include "Control/MidiClock.h"`. Nothing else in it moved. (`MidiClock.h` itself is
+  not a scaffold header.)
+- Cross-thread fields are atomic: `running`, the measured BPM and `hostOwnsTempo` (no longer a plain `bool`). The
+  beat counters, sample position, smoothing and the written value stay audio-thread-only. `setHostTempoOwns()` used to
+  clear the "last written" value directly; it can now be called from any thread, so it sets a flag that the next
+  `observe()` applies on the audio thread. Same effect one block later, and the plugin calls it every block anyway.
+- Unchanged on purpose: messages over 3 bytes are skipped before `getMessage()`, `tempoIndex` is passed in, nothing
+  allocates and everything is `noexcept`. The standalone app's behaviour is the same (one processor, one clock).
+- No UI file read the clock (`TempoField` and the status line read `board/tempo` from the registry), so the callers
+  were `BoardProcessor::processBlock`, `PluginProcessor::updateHostTempo` and the tests.
+- Tests (`MidiClockRoute` suite): two boards fed 120 and 240 BPM in alternation each measure and write their own tempo;
+  a stop on one board leaves the other running; host-owns on one board leaves the other still writing. Run with the
+  clock temporarily made one shared object again, all three failed (4, 1 and 1 expectations). The existing clock tests now use
+  a `MidiClock` of their own, and the host-sync test no longer has to clear a process-wide flag.
+- The earlier "I believe VST3 hosts do not deliver system real-time bytes" remark stays unchecked; this removes the
+  problem whether or not they do.
+
+**2. The host's bypass is Board Bypass.** `PluginProcessor::getBypassParameter()` returns the `board/bypass`
+`PluginParameter` (`parameters.find`).
+- Why it matters: in the JUCE VST3 wrapper (`juce_audio_plugin_client_VST3.cpp`), with no bypass parameter it adds its
+  own "Bypass" and calls `processBlockBypassed` (JUCE's default, which copies input to output without the chain's
+  latency compensation); with one, it uses that parameter as the VST3 bypass (`kIsBypass`) and *only* calls
+  `processBlock`, so the board's 10 ms equal-power fade and its latency-matched dry ring do the bypassing. The AU wrapper
+  follows the same rule. `processBlockBypassed` is therefore never reached and is not overridden.
+- Parameter id, automation id and state: unchanged. The VST3 id is generated from the parameter's string id
+  (`board/bypass`), as before; the plugin's own state JSON (format, version, board document, tempo) does not carry the switch's value; the parameter count is the same
+  (27). What does change for a host: the wrapper's own extra "Bypass" parameter (id `byps`) is gone, and the
+  wrapper's private "Bypass" property is no longer written. A project that had automation on that extra lane, or was saved
+  with the host bypass on, loses that one switch; the project's board, its macros and a lane on Board Bypass are
+  untouched. Not checked in any host.
+- The restore's fade still goes through `setBoardBypassedQuietly`, which resyncs the parameter without telling the host.
+  A restore that arrives while the host's bypass is already on leaves it on (`pendingStateUnbypass` is false then).
+- Tests (`PluginParameters` suite): the host's bypass parameter is `board/bypass` with that id, is the only parameter with
+  it, and the parameter list is the same size; a host bypass ramps over about 10 ms and back rather than cutting; a
+  bypassed board with a latent pedal returns the input delayed by that latency; a restore under a host bypass leaves it
+  bypassed and announces nothing. All four failed with the override taken out (13 expectations), but the last three
+  only because there was no parameter to drive; they describe what the board itself does (`processBlock` is what a wrapper
+  with a bypass parameter calls), so they pin the behaviour rather
+  than prove the wiring. The wrapper's own call of `processBlock` instead of `processBlockBypassed` was read in
+  the source, not run.
+- Conservative call: the editor-initiated preset swap still uses `board/bypass` for its fade and still looks like
+  automation to a host (open since the review above); a host's bypass that is on when such a swap ends is switched off by
+  it, as before.
+
+**Build and test, exactly:** Debug test target 3653 → 3684 expectations, 0 failed (the 31 are the new tests; the three
+clock ones also fail against a shared clock). `PumpBoardPlugin_VST3` built and linked in Debug (`pump BOARD.vst3`, `moduleinfo.json`). Release
+test target (GCC 13, LTO): 3568, 0 failed. **Not checked:** a real host (no bundle was loaded, so the wrapper's use of the
+bypass parameter and the removal of its own `byps` lane are from reading the JUCE source), two loaded plugin instances, the AU,
+macOS, and any sanitizer.
