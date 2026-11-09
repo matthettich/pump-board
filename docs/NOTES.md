@@ -1072,3 +1072,82 @@ plugin in its own CI job.
   `auval` passed, the bundle check passed, the validator built on the runner, **the validator loaded
   `pump BOARD.vst3` and its test suite passed**, and the plugin zip packaged and uploaded. Two annotations on that
   job, both notices about the runner, not findings. The app job on the same commit is untouched by any of this.
+
+## 2026-11-09 — overnight review of the VST3/plugin port (branch review/vst-fixes-2026-11-09)
+Audit of `Source/Plugin/*`, `HostServices.h`, the `BoardContent` extraction, the `MidiClock`/`BoardModel`/`TempoField`
+changes, the plugin parts of `CMakeLists.txt`, `Tests/Plugin*Tests.cpp` and `mac-build.yml`, on a Linux machine with no
+host and no owner awake. Local commits only, nothing pushed, `main` and `/home/claude/pump-board` untouched. Where a
+call had to be made it was the conservative one, and it is written down here. No scaffold header was changed.
+
+**Fixed (each has a test that failed before the change):**
+- **Macros did nothing with the editor closed.** `MacroBank::update()` is only ever called from a timer, and the only
+  timer that called it was the editor's (`BoardContent::timerCallback`). A host lane on `macro/N`, or a mapped
+  controller, moved the macro's own value and wrote no targets whenever the window was shut, which is when automation is
+  played. The processor's own 30 Hz timer now calls it (`2e1d877`). With the editor open both run on the message thread
+  and the second finds nothing changed.
+- **The trims showed no unit.** `addBoardParam` computed `" dB"` and then called `add()`, which has no suffix argument;
+  the comparison behind it also looked for "Input trim" where the registry says "Input Trim". Chosen by id now
+  (`b6fa8ba`).
+- **The host's tempo was written on every block.** `ParameterRegistry::set` bumps `changeCounter()`, which the editor
+  reads as "edited", so a preset was starred and the board marked unsaved a block after loading it. Written only when it
+  moved (`f3fb7f5`).
+- **The wait-behind-the-fade restore** (`32d364c`): a state that could never apply bypassed the board for the fade and
+  then applied nothing (now refused up front via `PluginSession::canRestoreState`, which shares `readState` with
+  `restoreState`); `getStateInformation` returned the old board while a restore waited (now returns the waiting state);
+  `releaseResources` stopped the timer that lands a waiting restore, leaving the board bypassed and the project's board
+  unapplied (it lands it itself); the fade's own bypass was announced to the host as two moves of Board Bypass, which a
+  host in a write mode records as automation (the plugin adopts its own bypass change silently). The waiting state,
+  deadline and unbypass flag are behind a `CriticalSection` because a host may call `setStateInformation` from its own
+  thread while the timer reads them. The version in a state is compared as a double, so `1e300` is refused rather than
+  cast to an int.
+  - Header change to note: `PluginSession.h` gained `canRestoreState()` and `PluginProcessor.h` gained
+    `landPendingState()`, `setBoardBypassedQuietly()` and `pendingLock`. None is a scaffold header.
+- **House rule** (`7cf4bc0`): the review bot's name was in eight comments of the plugin sources, `BoardContent.cpp` and the
+  workflow; reworded. Left: three files already on `main`, this file's history, and the bot's own config file.
+- **Tests only** (`373d689`): zero-length and zero-channel `processBlock`; one host-sync test left the process-wide
+  "host owns the tempo" flag set for whichever suite ran next.
+
+**Checked and fine (no change):** no allocation, lock or blocking call in `PluginProcessor::processBlock` (the one lock
+added above is on the message/host-state path only); blocks larger than the prepared size pass through instead of
+overrunning (`Slot::process` and the dry ring both guard); zero-length blocks; non-finite input (scrubbed in
+`BoardProcessor`); a hostile or truncated state (JUCE 9's parser has a nesting limit, `apply()` caps slots at 16 and
+looks mappings up by comparison, never by index); `ParameterRegistry::get` call sites in the plugin are all guarded; the
+plugin never writes `current.board` or `settings` (`HostServices::workingBoardFile()` is invalid, and every write in
+`BoardContent` is behind `hasWorkingCopy()` or `tempoEditable()`); parameter ids are strings and stable across
+save/reload; the host-tempo/MIDI-clock fight; `BoardContent` against the old `MainContent` (a line-set comparison of both
+files: every difference is the `engine` → `host` indirection, the three controllers taken by reference, the
+`hasWorkingCopy()` gating, the dialog look-and-feel, or the destructor's callback clearing).
+
+**Found and left, with the reason:**
+- Two plugin instances share `pb::clock`'s state (measurement, `written`, and the plain-`bool` host-owns flag). Same
+  open question as the 8 Nov entry; the fix needs a member on `BoardProcessor.h`. Added here: if two instances both see
+  a MIDI clock, each adds its block length to the shared sample position, so the measured BPM is wrong. I believe VST3 hosts do
+  not deliver system real-time bytes to an effect (not checked), which would make it an AU-only worry.
+- `PluginEditor` assumes one editor at a time. A host that creates a second before deleting the first (the first's
+  destructor then clears the learn/key callbacks and the editor-attached flag the second needs) would break the second.
+  I know of no path in the JUCE wrappers that does it (not checked against a host); a fix is an attach count in the session and per-instance
+  callbacks, which is a design change.
+- `pb::load` is one process-wide table of 64 slots: past four full boards the later slots show no load bar, and `LOAD`
+  sums every instance in the process. Cosmetic.
+- A preset swap started from the editor still bypasses and unbypasses `board/bypass` for its fade, which a host sees as
+  automation (the same thing fixed above for host restores) and which also ends any bypass the user or the host had
+  set. Pre-existing app behaviour moved into `BoardContent`; the poll cannot tell the swap from a click.
+- UI knob drags do not bracket host gestures (no `beginChangeGesture`), so a host in touch mode does not see a knob move
+  in the window as a touch. Latch and write are fine. A feature, not a defect.
+- `setStateInformation` and `prepareToPlay` from a thread that is not the message thread still run `restoreState` and
+  `prepareAllForHost` on the caller's thread when no fade is needed. Hopping to the message thread would change what a
+  host reads back straight after setting, so I did not.
+- Reported latency waits for `inputPeak() < 1e-5`; if the host stops calling `processBlock` with a loud last block, a
+  pedal change is not reported until blocks resume. By design (decision 2); noted because it can look stuck.
+- Decision 4 (universal binary for the plugin) is not implemented: `CMAKE_OSX_ARCHITECTURES` is forced to `arm64` for the
+  whole project, and the zip says `arm64`, so the repository is consistent with itself but an Intel host cannot load it.
+- `publish-plugin` deletes the release and then creates it, and `concurrency` cancels in-progress runs per ref: a newer
+  push landing between the two steps leaves no `plugin-latest` until the next run.
+- `board/bypass` is not offered as the host's bypass parameter (`getBypassParameter`), so a host's own bypass button
+  does not go through the board's crossfade or its latency compensation.
+
+**Build and test, exactly:** Debug test target before and after: 3562 → 3580 expectations, 0 failed (the 18 are the new
+tests). `PumpBoardPlugin_VST3` also built in Debug on Linux (55 steps; it produced `pump BOARD.vst3` with its
+`moduleinfo.json`) — that is a compile and link of the wrapper and the entry point, **not** a load: no host or
+validator ran. The SDK validator's submodule is empty here and the network is off, so it was not built. The AU target does
+not exist on Linux. The Release test run is recorded in `HANDOVER.md`.
