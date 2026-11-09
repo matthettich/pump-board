@@ -1,6 +1,6 @@
 # pump BOARD — architecture (condensed)
 
-Mac-only JUCE 8 standalone app. Audio in → input trim → up to 16 slots in series → output trim → safety limiter → audio out. 48 kHz, 64-sample buffer (128 fallback). Target round trip about 4–8 ms on a MacBook Neo (A18 Pro, 8 GB, fanless).
+Mac-only JUCE standalone app (JUCE 9.0.5, a submodule). Audio in → input trim → up to 16 slots in series → output trim → safety limiter → audio out. 48 kHz, 64-sample buffer (128 fallback). Target round trip about 4–8 ms on a MacBook Neo (A18 Pro, 8 GB, fanless).
 
 ## Threads
 
@@ -20,12 +20,12 @@ Audio and message threads share only:
 - To change structure (add, remove, reorder, load a preset), the message thread:
   1. builds a new `ChainSnapshot`, preparing any new slots there with `prepare()`
   2. publishes it with `BoardProcessor::publish()` (an atomic exchange)
-  3. keeps the old one in a retire list, and frees it only after the audio thread has finished at least one more block (see `BoardProcessor::collectGarbage`).
+  3. keeps the old one in a retire list, and frees it only once the audio thread has started two more blocks, which is when the block that might still have been reading it has finished (`BoardProcessor::collectGarbage`; with no device running nothing is reading, so it frees at once).
 - `Slot`s are owned by the message-thread `BoardModel` through `std::shared_ptr`. A slot that moves position is the same object, so delay tails and state survive reordering.
 
 ## Values and control
 
-- Every controllable value lives in `ParameterRegistry` under an id: `slot/<slotUid>/<paramId>`, `board/bypass`, `board/inputTrim`, `board/outputTrim`, `macro/<n>`.
+- Every controllable value lives in `ParameterRegistry` under an id: `slot/<slotUid>/<paramId>`, `board/bypass`, `board/inputTrim`, `board/outputTrim`, `board/tempo`, `macro/<n>`.
 - Writers (UI, MIDI, keys, macros) set the target atomically. `Slot` reads targets once per block and passes them to its effect, which smooths them.
 - `MidiRouter` runs on the audio thread at the start of each block. It looks up the incoming message in an immutable mapping table (swapped like the chain) and writes to the registry. Preset actions go into a FIFO for the message thread.
 - `MacroBank`: 8 macros, each mapped to N targets with min, max and curve. When a macro moves, it writes its targets through the registry.

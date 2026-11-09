@@ -1153,3 +1153,73 @@ validator ran. The SDK validator's submodule is empty here and the network is of
 not exist on Linux. Release test target (GCC 13): 3512 expectations, 0 failed (fewer than Debug: the allocation guard is Debug-only).
 GCC's `-Wshadow` still reports three pre-existing shadowed locals in `PluginSession.cpp`/`PluginProcessor.cpp`; Apple clang, which is
 where the zero-warning rule is judged, does not, and I left them.
+## 2026-11-09 — audit of main (unattended, Linux; verified by Claude)
+Scope: `Source/Engine`, `Control`, the adapters, `Presets`, `App`, then `UI`, plus the open lists in `HANDOVER.md`
+re-checked against the code. The owner was asleep, so every call below was the conservative one. No scaffold header
+was touched (`AudioEngine.h`, `MidiClock.h` and `PresetManager.h` carry no scaffold marker). Nothing in `external/pump`
+was edited. Baseline before any change: 3216 expectations, 0 failing (Debug, Linux); after: 3289, 0 failing, 73 of them
+the new `Tests/AuditFixesTests.cpp`. With the garbage-collection, target-parsing and learn-default fixes reverted, the three
+matching scenarios failed (5 expectations); the clock-index one does not compile without its new argument, the
+set-aside one needs its new function, and the SysEx one cannot fail (see below).
+
+**Fixed (commit, where, what went wrong)**
+- `b16f8f8` `MidiRouter.cpp` `handle`, `MidiClock.cpp` `observe`: `getMessage()` copies the bytes into an owning message
+  and heap-allocates past four; a controller's SysEx dump mallocked on the audio thread, twice a block. Messages over
+  three bytes are now skipped by size. The allocation guard hooks only `operator new`, so the malloc is argued from
+  JUCE's source, not measured; the test shows the note after a SysEx still maps.
+- `b16f8f8` `MidiClock.cpp`: the first completed beat called `ParameterRegistry::find ("board/tempo")` on the audio
+  thread: a String built from a literal (heap) and a string search over a table the message thread edits (a data race
+  on `juce::String` while a board loads). `BoardProcessor` now passes its own `tempoIndex`; the lookup remains only as
+  the fallback for callers that pass none.
+- `59661b5` `BoardProcessor::collectGarbage`: with no device running the block counter never moves, so retired chains
+  (slots, pedals, registry params, load-meter rows) were never freed: about eight board loads without audio fill the
+  4096-entry registry, four fill the 64-row load meter. Now frees at once when `deviceRunning` is false.
+- `a9bf0b1` `BoardState.cpp` `paramIndexForTarget`: `getIntValue()` reads `"s2"` or `"x"` as 0 and wraps long numbers, so
+  a mapping written `slot/s2/drive` quietly drove the first pedal. Digits only, at most three.
+- `5cb5c37` `LearnController::defaultActionFor`: a CC footswitch learned onto a switch had Toggle ticked, and Toggle only
+  listens to notes and keys, so it did nothing. With a CC pending the default is the threshold.
+- `a6cbd6e` `MainWindow::loadWorkingBoard` + `setAsideUnreadable`: an unreadable `current.board` (damaged, or saved by
+  a newer build) was replaced by the next autosave with no trace. It is moved to `current.board.unreadable` first.
+- `8eb214c` `AudioEngine`: `restoreSaved` opened a stand-in device through `open()`, which wrote `audio.xml`, so the saved
+  setup was overwritten before it was tried (the interface was forgotten after one launch), and nothing ever saved a
+  device picked in Settings. Stand-in no longer persists; `shutdown()` saves, except after a fallback launch.
+  The card-0.2 check ("a planted 128-sample setup came back as 128") only proved the first read, which is why it passed.
+- `3cc2234` status line printed `LOAD 36.9914%` (`String (x, 0)` means "as many digits as needed"); the slot load bar
+  sat inside the second value line. Both were `HANDOVER` items 4 and 2. The bar's new place is by arithmetic only.
+- `1dbfee7` (test, no defect found): all 24 pedals, one at a time, with every parameter moved each block, allocate
+  nothing on the audio thread in steady state. The old test covered three pedals.
+- Docs: handover said pump was pinned at `7d981aa` (it is `419fbcf`), said the five tempo-locked pedals ignore the board
+  tempo (they follow it, `TempoReachTests`), listed choice labels as an open gap (closed by card 5.23), called JUCE a
+  gitignored clone (a submodule), and pointed to a section "Open from the review" that does not exist (it is "Still
+  open"). `ARCHITECTURE.md` said a retired chain is freed after one block (it is two) and JUCE 8; `PUMP_DSP_MAP.md` had
+  the old pin. `REVIEW_TEMPLATE.md`'s phase tables stay stale on purpose (see 8 Nov, card 5.36).
+
+**Open lists, re-checked.** Still real: replay of a pedal's old tail (`Slot::process` skips the pedal once settled off),
+the `MainContent` god object (1405 lines in `MainWindow.cpp`), AMP (paused), 20-control pages, a pedal that blows up
+internally staying silent, `--render-slots` drawing three hardcoded pedals, the changeCounter landmine. Closed: item 4
+and 2 of "What still needs doing" (above), decision 2 (choice labels).
+
+**Looked at and left alone, with the reason**
+- `forgetPedalParams` would delete a preset-action mapping whose stale `paramIndex` is in the removed pedal. Not
+  reachable: neither Learn nor the MAPPINGS view can create a preset action, only a hand-written file can, and
+  `apply()` gives those no param.
+- Mono fold (`BoardProcessor`, per block, `1e-6` threshold): an unplugged second input with more than -120 dBFS of noise
+  is never folded up. A design choice recorded earlier; changing the threshold needs a real interface to judge.
+- `getSampleRateHz()`/`getMaxBlock()` are plain members written by the device thread and read by the timer. Benign on
+  64-bit, formally a race; the header is a scaffold, so left.
+- A modal "Type a value" or macro-target dialog holds a param index across the modal; a program-change load behind it
+  could land the typed value on a reused index. Exotic. Left.
+- `LearnCaptured` is dropped if the 256-event FIFO is full, which leaves the UI in learn mode until Esc. Needs a stalled
+  message thread to happen. Left.
+- `updateStatus` writes the settings file whenever the tempo moves, so a running MIDI clock writes it about twice a
+  second. Harmless, left.
+- A tempo of NaN in the settings file passes `readTempo`'s clamp; the registry then refuses it and the default stays.
+
+**Not verified**
+- No Release build or run of any of this (a Debug build of the suite alone took over an hour on a shared two-core box).
+- `AudioEngine.cpp`, `MainWindow.cpp` (the `setAsideUnreadable` call) and `SlotView.cpp` are not linked by the suite:
+  `MainWindow.cpp` and `SlotView.cpp` were compiled (Debug, no errors), `AudioEngine.cpp` is in the core library; none was
+  run, and no screen or sound was looked at or listened to. Linux has no audio backend, so the `audio.xml` change was
+  argued from the code only.
+- The 24 adapters' defaults were left to their null tests; `GenericEffectEditor`, `BoardPrototype`, `MappingsView`,
+  `PresetLibrary` were read for stale-index and bounds mistakes only.

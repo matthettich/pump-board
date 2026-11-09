@@ -132,6 +132,11 @@ int paramIndexForTarget (const juce::String& target, const std::vector<juce::Str
     if (! splitSlotParam (target, uid, paramId))
         return registry.find (target);               // "board/bypass", "macro/3"
 
+    // A position is plain digits. getIntValue() reads "s2" or "x" as 0, so a hand-written "slot/s2/drive" (the
+    // registry's own uid spelling) quietly aimed at the first pedal; too many digits would wrap to a real position.
+    if (uid.length() > 3 || ! uid.containsOnly ("0123456789"))
+        return ParameterRegistry::kInvalid;
+
     const int position = uid.getIntValue();
 
     if (position < 0 || position >= (int) slotUids.size())

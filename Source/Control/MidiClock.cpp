@@ -49,7 +49,8 @@ bool isRunning() noexcept { return state.running; }
 
 double lastMeasuredBpm() noexcept { return state.measured; }
 
-bool observe (const juce::MidiBuffer& midi, int numSamples, ParameterRegistry& registry, double sampleRate) noexcept
+bool observe (const juce::MidiBuffer& midi, int numSamples, ParameterRegistry& registry, double sampleRate,
+              int tempoIndex) noexcept
 {
     auto& s = state;
     s.sampleRate = sampleRate > 0.0 ? sampleRate : s.sampleRate;
@@ -58,6 +59,11 @@ bool observe (const juce::MidiBuffer& midi, int numSamples, ParameterRegistry& r
 
     for (const auto metadata : midi)
     {
+        // Clock, start, continue and stop are one byte. Anything over four bytes (SysEx) would be heap-allocated by
+        // getMessage(), which the audio thread must not do; anything over three cannot be one of these anyway.
+        if (metadata.numBytes < 1 || metadata.numBytes > 3)
+            continue;
+
         const auto message = metadata.getMessage();
 
         if (message.isMidiStart() || message.isMidiContinue())
@@ -111,9 +117,15 @@ bool observe (const juce::MidiBuffer& midi, int numSamples, ParameterRegistry& r
                     state.smoothed = state.smoothed <= 0.0 ? bpm
                                                            : state.smoothed + kSmoothing * (bpm - state.smoothed);
 
-                    // The index is looked up once per registry, never per beat: find() compares strings, which is
-                    // not something to do on the audio thread every half second.
-                    if (state.registeredWith != &registry)
+                    // The caller's index when it has one. Otherwise it is looked up once per registry, never per
+                    // beat (find() compares strings, and the literal builds a String: neither belongs on the audio
+                    // thread, which is why BoardProcessor passes its own).
+                    if (tempoIndex != ParameterRegistry::kInvalid)
+                    {
+                        state.registeredWith = &registry;
+                        state.tempoIndex = tempoIndex;
+                    }
+                    else if (state.registeredWith != &registry)
                     {
                         state.registeredWith = &registry;
                         state.tempoIndex = registry.find ("board/tempo");

@@ -12,14 +12,19 @@ decision and deviation — read it before changing anything, it is where the tra
   mappings, and the app can be played: sixteen slots, eight macros, MIDI and key mappings, presets with
   program changes, and a measured round trip in Settings. What is left is hand-testing
   (`REVIEW_TEMPLATE.md`) and phases 5–7 (more pedals, custom pedals, the full skin).
-- **Tests:** 3580 expectations in Debug, 0 failing on the plugin branch (9 Nov, Linux; the 3216 below is the pre-plugin count).
+- **Tests:** 3653 expectations in Debug, 0 failing on the plugin branch with main's 9 Nov audit merged in (Linux; the figures below are main's own).
   Previous run on `main`: 8 Nov 2026 on this Mac, after a clean
   rebuild of all 256 targets with 0 warnings in `Source/` and `Tests/`; the 6 Nov cloud run on Linux
   agrees. That run also caught the one warning the incremental builds had been hiding.
+- **Tests:** 3289 expectations in Debug, 0 failing (Linux, 9 Nov 2026, after the audit in the last `NOTES.md` entry;
+  3216 before it, and 73 of the 3289 are the new `AuditFixes` suite). The Mac run of 8 Nov (3216, a clean rebuild of
+  all 256 targets with 0 warnings in `Source/` and `Tests/`) predates the audit's changes, so the Mac has not seen
+  them: rebuild there and run the suite before trusting `AudioEngine.cpp`, `MainWindow.cpp` and `SlotView.cpp`, which
+  the suite does not link. No Release run of the audit's changes.
 - **Latest pass (6 Nov 2026):** a senior-style review fixed a use-after-free on pedal swap/remove/device change,
   stale mappings after a pedal goes, empty slots vanishing on load, a click when a latency pedal is switched off,
   and a dozen smaller bugs; then the whole app was reskinned to Thunder Plus's **IDM PINK & GREEN**. The full list
-  is the last entry in `NOTES.md`; what the review found but did not fix is under "Open from the review" below.
+  is the last entry in `NOTES.md`; what the review found but did not fix is under "Still open" below (audited again on 8 Nov, see the last `NOTES.md` entry).
 - **Plan:** `docs/tasks/phase-0.md` … `phase-5-6-7.md`, one card at a time.
 
 ---
@@ -28,7 +33,8 @@ decision and deviation — read it before changing anything, it is where the tra
 
 JUCE and pump are **submodules**: clone with `git clone --recurse-submodules` (or run
 `git submodule update --init --recursive` in an existing checkout). They are pinned to JUCE 9.0.5
-(`d60b7a7`) and pump `7d981aa` — the exact commits this app is built and tested against. Configure with
+(`d60b7a7`) and pump `419fbcf` (GRUMBLE's dry-path fix) — the exact commits this app is built and tested against;
+`git submodule status` is the authority if this line and the checkout ever disagree. Configure with
 `-DCMAKE_BUILD_TYPE=Debug`: that enables `PB_ALLOCATION_GUARD`, which is where the 20 expectations in
 `AllocationGuardTests` come from, so a plain configure runs fewer and is otherwise clean.
 
@@ -40,7 +46,7 @@ cmake --build build
 ```
 
 ```bash
-./build/PumpBoardTests_artefacts/Debug/PumpBoardTests          # 3216 expectations
+./build/PumpBoardTests_artefacts/Debug/PumpBoardTests          # 3289 expectations
 open "build/PumpBoard_artefacts/Debug/pump BOARD.app"          # or double-click it in Finder
 ```
 
@@ -71,7 +77,7 @@ target links the shared UI library (through `PumpBoardPluginSupport`) but never 
   `pump.grain`, `pump.stutter`, `pump.chop`, `pump.wide`, `pump.band`, `pump.eq`, `pump.twang` as `IEffect` adapters;
   METER and MASTER are deliberately absent, see NOTES' phase-5 closing entry. The five tempo-locked ones
   (SWIRL, GATE, GRAIN, STUTTER, CHOP)
-  free-run at their adapter's own 120 BPM: the board's tempo does not reach effects yet — see NOTES, last entry. Bit-identical to pump's own engines (null tests: difference exactly 0.0 at 64/128/511 samples,
+  follow `board/tempo` like ECHO and VERB (see "Tempo" below). Bit-identical to pump's own engines (null tests: difference exactly 0.0 at 64/128/511 samples,
   defaults and edited, with one exception: WIDE's balanced two-band setting measured 2.5e-9, about −172 dBFS — see NOTES). TONE, CALM, HEAT, STRIP, LIMIT, TUBE and CRUSH report latency by default — TONE and CALM
   the most at their default FFT — and SNAP when its lookahead is on; SPRING, ECHO and VERB never do. The dry paths
   compensate and the status line shows the total — see the landmine.
@@ -140,8 +146,8 @@ guessing at interaction quality from code.
 ## What still needs doing (8 Nov 2026)
 
 Written after a clean rebuild and the first look at the running window on this Mac. Ordered by what it costs to
-leave undone. The lists further down — "Still open" and "Decisions still open" — are unchanged; they were not
-re-audited for this pass, so treat their detail as of 6 Nov and this section as of 8 Nov.
+leave undone. The lists further down — "Still open" and "Decisions still open" — were re-checked against the code in
+a Linux audit later on 8 Nov (last `NOTES.md` entry): each item is still real except where it now says otherwise.
 
 ### 1. The hand-test pass. Nothing has been driven
 
@@ -150,9 +156,10 @@ re-audited for this pass, so treat their detail as of 6 Nov and this section as 
 under a held note, save-and-restore, knobs, key-learn, ten-minute soak. All 21 are unrun. Three need gear: a MIDI
 footswitch, a loopback cable, a clock source.
 
-### 2. The slot load bar is drawn across each pedal's second value line
+### 2. The slot load bar is drawn across each pedal's second value line (moved 8 Nov, not yet looked at)
 
-Seen on screen, and confirmed by arithmetic: the bar is `r.getBottom() - 40.0f`, 3 px tall (`SlotView.cpp`), the
+Fixed by arithmetic on 8 Nov, not by eye: the bar now sits at `r.getY() + 42.5`, in the gap between the category
+line (28..40) and the first value line (47..59). Look at it on the Mac with a pedal playing. As found:  the bar is `r.getBottom() - 40.0f`, 3 px tall (`SlotView.cpp`), the
 text is `r.getY() + 60.0f`, 12 px tall. A card here is about 102 pt, so the bar lands at 62 — inside the text's
 60–72 box. On every pedal the lower line has a grey bar through it (`DRIVE 12 dB`, `DECAY 2.50 s`, `DRIP 50 %`).
 The harness renders never showed it because the bar only draws when `load > 0.0005f` and `--render-slots` never
@@ -165,13 +172,13 @@ restores — it drew three pedals while the app restores seven. Its selected pan
 (DWELL/DRIP/TENSION under a `pump TUBE` heading); the live panel is correct, so this is a tool that lies, not a
 UI bug. Either load `current.board` in that path or mark it plainly as a fixture.
 
-### 4. The status line prints four decimals
+### 4. The status line prints four decimals — fixed 8 Nov
 
-`LOAD 36.9914%`, in a line where everything else is one decimal or an integer.
+`LOAD 36.9914%`: `juce::String (x, 0)` means "as many digits as needed", not "none". It is `roundToInt` now.
 
 ### 5. The review's phase tables describe a smaller app
 
-`REVIEW_TEMPLATE.md` still says 21 pedals and 2496 expectations; it is 24 and 3216. Deliberately left when the
+`REVIEW_TEMPLATE.md` still says 21 pedals and 2496 expectations; it is 24 and 3289. Deliberately left when the
 checklist was renumbered: rewriting a dated record is a different job from fixing a checklist.
 
 ### Verified today, so nobody repeats it
@@ -197,13 +204,10 @@ checklist was renumbered: rewriting a dated record is a different job from fixin
 
 ## Decisions still open for the owner
 
-1. **JUCE version.** `external/JUCE` is a shallow clone of master = **9.0.5**, not the 8.x the plan was
+1. **JUCE version.** `external/JUCE` is a submodule pinned at **9.0.5** (`d60b7a7`), not the 8.x the plan was
    written for. Pin to 8.x (recommended, the API and licence terms match the plan) or adopt 9 deliberately.
-   Also: make it a submodule before this is shared; it is gitignored today.
-2. **Choice labels.** `ParamInfo` has no label list, so pump's named modes show as numbers: spring `model`
-   0–5, echo `mode`/`stereo`/`note_l`/`note_r`/`pitch_mode`, tube `mode`/`focus`/`oversampling`. Either add
-   an optional choices list to the scaffold struct (needs review) or let adapters supply their own editors.
-   This is the largest remaining gap between the app and pump's own plugins.
+2. **Choice labels — closed (card 5.23).** `ParamInfo` carries an optional `choices` list and the adapters fill it
+   from pump's own name tables, so named modes show their names. (This item used to say they showed as numbers.)
 3. **Latency compensation — the mid-play half is settled.** The owner asked for no oversampling change mid play,
    and card 5.33 now holds the change back until the input has been silent, so a pedal's latency can no longer
    move under a held note. What is still open is compensating the chain: a TUBE, CRUSH or COMP slot still
@@ -306,10 +310,11 @@ Closed on 6 Nov: change-only `dirty` in every adapter (`AssignHelpers.h`), sampl
 change, paged editor for dense pedals, `PresetManager` name/rename edges, `MidiRouter` router limit. Details in the
 last `NOTES.md` entries. Left:
 
-1. **A pedal switched back on replays its old tail.** A settled-off slot freezes its pedal's state rather than
+1. **A pedal switched back on replays its old tail.** (Re-checked 8 Nov: still real, `Slot::process` skips the pedal
+   once it has settled off.) A settled-off slot freezes its pedal's state rather than
    clearing it. Fix with a fresh successor (`makeSuccessor`) once a slot has been off for ~50 ms, never `reset()`
    on the audio thread.
-2. **`MainContent` is a god object** (~1300 lines: layout, autosave, presets, swap state machine, learn flow, four
+2. **`MainContent` is a god object** (`MainWindow.cpp` is ~1400 lines; the class: layout, autosave, presets, swap state machine, learn flow, four
    menus, status text, tempo, overlays). Split out a `BoardSession` (autosave, presets, swap) and a `SlotMenus`
    helper before adding more to it. `BoardPrototype`'s painted slots/editor duplicate the real components.
 3. **TO DO — add pump AMP (owner approved the schema change, 6 Nov 2026; paused before starting).** The most
@@ -478,6 +483,19 @@ judged on the Mac build.
 - **Keep our own code at 0 warnings.** pump's headers and the scaffold's unused fields do warn; that is
   expected and left alone. Anything under `Source/` or `Tests/` should be silent, including `-Wfloat-equal`
   (compare with a tolerance).
+
+- **`audio.xml` is written by `AudioEngine::open` (persist) and by `shutdown()`, and nowhere else** (8 Nov). Before
+  that, `restoreSaved` opened a stand-in default device through the same function, which overwrote the saved
+  setup before it was tried, and a device picked in Settings was never saved at all. The stand-in no longer
+  persists, and a launch that fell back (`isUsingFallback()`) does not write at quit, so an unplugged interface is
+  remembered for when it returns. Not testable on Linux (no audio backend); unverified on the Mac.
+- **A working board that cannot be read is moved to `current.board.unreadable`** (numbered if taken) by
+  `setAsideUnreadable`, then the app starts with the migration or seed board. Before, the next autosave replaced it.
+- **`BoardProcessor::collectGarbage` frees everything when no device is running** (`releaseResources` has run or
+  `prepareToPlay` never did). Blocks are what age a retired chain, so without this a stopped device kept every old
+  slot and its params for good.
+- **The audio thread never calls `getMessage()` on a message over three bytes** (it copies, and a SysEx heap-allocates)
+  and never calls `ParameterRegistry::find`: `pb::clock::observe` takes the tempo index from `BoardProcessor`.
 
 ## House rules
 

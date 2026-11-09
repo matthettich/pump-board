@@ -9,7 +9,9 @@ own `common/dsp/*` and their own `XxxParams.hpp` — no DISTRHO, no `AudioProces
 truth for both.
 
 - repo: `https://github.com/matthettich/pump`, cloned from that URL
-- pump commit: `7d981aae180ff32a272ea19b09db7707b4a77006` (main, 2026-11-05) — verified level with upstream main
+- pump commit: `7d981aae180ff32a272ea19b09db7707b4a77006` (main, 2026-11-05) — verified level with upstream main when this map
+  was written. The submodule has moved since (GRUMBLE, then its dry-path fix): it is pinned at `419fbcf` as of 8 Nov 2026;
+  `git submodule status` is the authority.
 - Read-only: `external/pump`, never edited. Adapters wrap; they do not fork.
 - **Licence:** pump's own code is "Copyright (c) 2026 wake. All rights reserved" — visible, not licensed for
   redistribution by anyone else. Compiling it into pump BOARD is fine for the author and means the board cannot be
