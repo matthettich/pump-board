@@ -2,6 +2,7 @@
 #include "Effects/EffectRegistry.h"
 #include "Presets/BoardSerializer.h"
 #include "Presets/BoardState.h"
+#include <cmath>
 #include <mutex>
 
 namespace pb
@@ -54,7 +55,7 @@ juce::String readState (const juce::var& state, BoardData& data, juce::var& temp
     // Exactly this build's version. An older one has no reader yet, and a newer one was written by a build that knew
     // more than this one: half-applying it would keep the pedals and lose whatever it added. Compared as a double:
     // a version written as 1e300 must not be cast to an int on its way to being refused.
-    if ((double) version != (double) kStateVersion)
+    if (std::abs ((double) version - (double) kStateVersion) > 1.0e-9)
         return "the state is version " + juce::String ((double) version) + ", and this build writes "
                + juce::String (kStateVersion);
 
