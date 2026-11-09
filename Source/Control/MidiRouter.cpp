@@ -224,6 +224,11 @@ void MidiRouter::handle (const juce::MidiBuffer& midi) noexcept
 
     for (const auto metadata : midi)
     {
+        // Everything mappable is one to three bytes. getMessage() copies the bytes into an owning MidiMessage, which
+        // heap-allocates past four of them: a controller's SysEx dump would otherwise malloc on the audio thread.
+        if (metadata.numBytes < 1 || metadata.numBytes > 3)
+            continue;
+
         const auto message = metadata.getMessage();
 
         MappingSource src;

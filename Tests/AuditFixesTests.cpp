@@ -1,0 +1,110 @@
+// Regression tests for the 8 Nov 2026 audit (docs/NOTES.md, "audit of main"). One scenario per fix.
+#include <juce_core/juce_core.h>
+#include <juce_audio_basics/juce_audio_basics.h>
+#include "Common/AllocationGuard.h"
+#include "Control/KeyRouter.h"
+#include "Control/LearnController.h"
+#include "Control/MacroBank.h"
+#include "Control/MidiClock.h"
+#include "Control/MidiRouter.h"
+#include "Control/ParameterRegistry.h"
+#include "Effects/EffectRegistry.h"
+#include "Engine/BoardModel.h"
+#include "Engine/BoardProcessor.h"
+#include "Presets/BoardState.h"
+#include "Presets/PresetManager.h"
+
+namespace
+{
+pb::ParameterRegistry::Entry toggleEntry (const juce::String& id)
+{
+    pb::ParameterRegistry::Entry e;
+    e.id = id;
+    e.minValue = 0.0f;
+    e.maxValue = 1.0f;
+    e.defaultValue = 0.0f;
+    e.isToggle = true;
+    return e;
+}
+
+std::unique_ptr<pb::MappingTable> noteToggle (int paramIndex, int note)
+{
+    auto table = std::make_unique<pb::MappingTable>();
+    pb::Mapping mapping;
+    mapping.source = { pb::SourceType::Note, 0, note };
+    mapping.action = pb::ActionType::Toggle;
+    mapping.paramIndex = paramIndex;
+    table->mappings.push_back (mapping);
+    return table;
+}
+} // namespace
+
+class AuditFixesTests final : public juce::UnitTest
+{
+public:
+    AuditFixesTests() : juce::UnitTest ("AuditFixes", "engine") {}
+
+    void runTest() override
+    {
+        beginTest ("the clock writes the tempo through the index it is given, with no lookup by name");
+        {
+            // The audio thread must not call ParameterRegistry::find (a string compare over the whole table, racing
+            // the message thread's add/remove, and the literal builds a String on the heap). The processor hands the
+            // clock its own tempo index; here the param's id is not "board/tempo", so a lookup by name would find nothing.
+            pb::ParameterRegistry registry;
+            registry.add (toggleEntry ("unrelated"));
+
+            pb::ParameterRegistry::Entry tempo;
+            tempo.id = "not-the-tempo";
+            tempo.minValue = 20.0f;
+            tempo.maxValue = 300.0f;
+            tempo.defaultValue = 120.0f;
+            const int tempoIndex = registry.add (tempo);
+
+            pb::clock::reset();
+
+            int pos = 0;
+
+            for (int block = 0; block < 3000; ++block)       // 240 BPM: a pulse every 500 samples
+            {
+                juce::MidiBuffer midi;
+
+                for (int i = 0; i < 64; ++i)
+                    if ((pos + i) % 500 == 0)
+                        midi.addEvent (juce::MidiMessage::midiClock(), i);
+
+                pb::clock::observe (midi, 64, registry, 48000.0, tempoIndex);
+                pos += 64;
+            }
+
+            expectWithinAbsoluteError (registry.get (tempoIndex), 240.0f, 2.0f);
+            pb::clock::reset();
+        }
+
+        beginTest ("a system-exclusive message in the block is skipped, and the note after it still maps");
+        {
+            // MidiMessageMetadata::getMessage() copies the bytes, and a message over four bytes is heap-allocated:
+            // a controller's SysEx dump must be skipped by its size before it is ever turned into a MidiMessage.
+            pb::ParameterRegistry registry;
+            pb::MidiRouter router (registry);
+            const int toggle = registry.add (toggleEntry ("switch"));
+            router.publish (noteToggle (toggle, 60));
+
+            const juce::uint8 sysex[] = { 0xf0, 0x7e, 0x7f, 0x06, 0x02, 0x00, 0x20, 0x29, 0x01, 0x00, 0xf7 };
+
+            juce::MidiBuffer midi;
+            midi.addEvent (sysex, (int) sizeof (sysex), 0);
+            midi.addEvent (juce::MidiMessage::noteOn (1, 60, (juce::uint8) 100), 1);
+
+            router.handle (midi);
+            expectEquals (registry.get (toggle), 1.0f);
+
+            pb::clock::reset();
+            pb::clock::observe (midi, 64, registry, 48000.0);    // the clock reads the same block
+            expect (! pb::clock::isRunning());
+        }
+
+    }
+};
+
+static AuditFixesTests auditFixesTests;

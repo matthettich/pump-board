@@ -12,7 +12,11 @@ namespace pb::clock
 {
 // Reads clock / start / continue / stop out of one block and updates `board/tempo`. `numSamples` is the block the
 // buffer describes. Returns true when the registry was written.
-bool observe (const juce::MidiBuffer& midi, int numSamples, ParameterRegistry& registry, double sampleRate) noexcept;
+// `tempoIndex` is the registry index of `board/tempo`. The audio thread passes the one it already holds; without it the
+// clock looks the id up itself, once per registry, which is a string search over a table the message thread may be
+// editing and a heap-built String - fine for a test, not for a block.
+bool observe (const juce::MidiBuffer& midi, int numSamples, ParameterRegistry& registry, double sampleRate,
+              int tempoIndex = ParameterRegistry::kInvalid) noexcept;
 
 // Forgets the interval history and drops out of "running". The tempo stays where it was: a clock that stops should
 // not rewind the room to 120.
