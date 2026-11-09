@@ -197,6 +197,34 @@ public:
                 expectEquals (learn.mappings()[0].paramIndex, model.at (1)->onParamIndex());
         }
 
+        beginTest ("a CC footswitch learned onto a switch defaults to the threshold, a note to Toggle");
+        {
+            pb::ParameterRegistry registry;
+            pb::MidiRouter router (registry);
+            pb::KeyRouter keys (router);
+            pb::LearnController learn (registry, router, keys);
+            const int toggle = registry.add (toggleEntry ("test/switch"));
+
+            learn.beginLearn (toggle);
+            learn.sourceCaptured ({ pb::SourceType::CC, 1, 64 });
+            expect (learn.defaultActionFor (toggle) == pb::ActionType::CCThreshold);
+            learn.commitPending (learn.defaultActionFor (toggle));
+
+            juce::MidiBuffer down, up;
+            down.addEvent (juce::MidiMessage::controllerEvent (1, 64, 127), 0);
+            up.addEvent (juce::MidiMessage::controllerEvent (1, 64, 0), 0);
+
+            router.handle (down);
+            expectEquals (registry.get (toggle), 1.0f, "the footswitch now does something");
+            router.handle (up);
+            expectEquals (registry.get (toggle), 0.0f);
+
+            learn.beginLearn (toggle);
+            learn.sourceCaptured ({ pb::SourceType::Note, 1, 36 });
+            expect (learn.defaultActionFor (toggle) == pb::ActionType::Toggle);
+            learn.cancelLearn();
+        }
+
     }
 };
 
