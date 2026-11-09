@@ -157,6 +157,46 @@ public:
             expect (registry.find (id) == pb::ParameterRegistry::kInvalid);
         }
 
+        beginTest ("a mapping target whose slot is not a plain position is dropped, not aimed at slot 0");
+        {
+            pb::ParameterRegistry registry;
+            pb::MidiRouter router (registry);
+            pb::BoardProcessor processor (registry, router);
+            pb::EffectRegistry effects;
+            pb::registerBuiltInEffects (effects);
+            pb::BoardModel model (processor, effects, registry);
+            pb::MacroBank macros (registry);
+            pb::KeyRouter keys (router);
+            pb::LearnController learn (registry, router, keys);
+            processor.prepareToPlay (48000.0, 64);
+
+            pb::BoardData data;
+            data.slots.resize (2);
+            data.slots[0].typeId = "pump.tube";
+            data.slots[1].typeId = "pump.echo";
+
+            const char* const targets[] = { "slot/s1/on", "slot/x/on", "slot/1x/on", "slot/4294967296/on", "slot/1/on" };
+
+            for (const auto* target : targets)
+            {
+                pb::BoardData::MappingData mapping;
+                mapping.source = "note";
+                mapping.number = 60;
+                mapping.action = "toggle";
+                mapping.target = target;
+                data.mappings.push_back (mapping);
+            }
+
+            const auto result = pb::apply (data, model, macros, learn, registry);
+
+            expect (result.ok);
+            expectEquals ((int) learn.mappings().size(), 1, "only the plain \"slot/1/on\" survives");
+            expectEquals (result.warnings.size(), 4);
+
+            if (learn.mappings().size() == 1)
+                expectEquals (learn.mappings()[0].paramIndex, model.at (1)->onParamIndex());
+        }
+
     }
 };
 
