@@ -107,6 +107,10 @@ public:
             expectWithinAbsoluteError (tempoOf (processor.getSession()), 90.0f, 0.01f);
 
             processor.setPlayHead (nullptr);
+
+            // "The host owns the tempo" is process-wide clock state, and nothing here runs another block to clear it.
+            // Left set, it would silently stop the MIDI clock writing in whichever suite runs next.
+            pb::clock::setHostTempoOwns (false);
         }
 
         beginTest ("with no host tempo, the MIDI clock still sets the tempo");
