@@ -374,7 +374,7 @@ dated entry at the end of `NOTES.md` first, it has every finding, fixed or left,
   - A parameter that points at a slot (`slot/N/on`) is re-pointed by `refreshChain()` at 30 Hz, not at the moment the
     chain changes.
 - **Verified on Linux, 9 Nov:** Debug suite 3580 expectations, 0 failed (3562 before the review's tests); `PumpBoardPlugin_VST3`
-  compiles and links in Debug (it yields `pump BOARD.vst3` with `moduleinfo.json`). Release suite: see the note below.
+  compiles and links in Debug (it yields `pump BOARD.vst3` with `moduleinfo.json`). Release suite (`build-rel`, GCC 13, LTO) 3512 expectations, 0 failed — fewer than Debug because the allocation guard is Debug-only.
 - **Not verified by anyone:** the bundle loading in any host; the AU (Linux has no target for it); the VST3 SDK validator
   (the submodule is empty without network); macOS builds of any of the review's commits (the last green CI run, 35, was on `2b19541`); editor drawing or
   interaction in a host; thread-sanitizer or address-sanitizer runs; two instances in one process.

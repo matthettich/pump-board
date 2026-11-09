@@ -1150,4 +1150,6 @@ files: every difference is the `engine` → `host` indirection, the three contro
 tests). `PumpBoardPlugin_VST3` also built in Debug on Linux (55 steps; it produced `pump BOARD.vst3` with its
 `moduleinfo.json`) — that is a compile and link of the wrapper and the entry point, **not** a load: no host or
 validator ran. The SDK validator's submodule is empty here and the network is off, so it was not built. The AU target does
-not exist on Linux. The Release test run is recorded in `HANDOVER.md`.
+not exist on Linux. Release test target (GCC 13): 3512 expectations, 0 failed (fewer than Debug: the allocation guard is Debug-only).
+GCC's `-Wshadow` still reports three pre-existing shadowed locals in `PluginSession.cpp`/`PluginProcessor.cpp`; Apple clang, which is
+where the zero-warning rule is judged, does not, and I left them.
