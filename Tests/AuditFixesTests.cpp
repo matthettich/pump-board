@@ -253,6 +253,50 @@ public:
             directory.deleteRecursively();
         }
 
+#ifdef PB_ALLOCATION_GUARD
+        beginTest ("every registered pedal runs a steady-state block, and a parameter move, without allocating");
+        {
+            pb::ParameterRegistry registry;
+            pb::MidiRouter router (registry);
+            pb::BoardProcessor processor (registry, router);
+            pb::EffectRegistry effects;
+            pb::registerBuiltInEffects (effects);
+            pb::BoardModel model (processor, effects, registry);
+            processor.prepareToPlay (48000.0, 64);
+
+            for (const auto& descriptor : effects.list())
+            {
+                model.clear();
+                expect (model.insert (0, descriptor.typeId), descriptor.typeId);
+
+                juce::AudioBuffer<float> buffer (2, 64);
+                juce::MidiBuffer midi;
+                int worst = 0;
+
+                for (int block = 0; block < 12; ++block)
+                {
+                    for (int ch = 0; ch < 2; ++ch)
+                        for (int i = 0; i < 64; ++i)
+                            buffer.setSample (ch, i, 0.2f * std::sin (0.05f * (float) (i + 64 * block)));
+
+                    // Move every parameter of the pedal a little each block: a setParam must not allocate either.
+                    const auto& indices = model.at (0)->paramIndices();
+
+                    for (const int index : indices)
+                        if (index != pb::ParameterRegistry::kInvalid && block >= 6)
+                            registry.setNormalised (index, registry.getNormalised (index) * 0.98f + 0.01f);
+
+                    pb::alloc::resetViolations();
+                    processor.processBlock (buffer, midi);
+
+                    if (block >= 4)
+                        worst = juce::jmax (worst, pb::alloc::violations());
+                }
+
+                expectEquals (worst, 0, descriptor.typeId + " allocated on the audio thread");
+            }
+        }
+#endif
     }
 };
 
