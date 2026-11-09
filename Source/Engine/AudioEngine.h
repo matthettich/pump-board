@@ -35,7 +35,7 @@ public:
     double getReportedLatencyMs() const;
 
 private:
-    bool open (int numInputs, int numOutputs, int bufferSize, const juce::XmlElement* saved);
+    bool open (int numInputs, int numOutputs, int bufferSize, const juce::XmlElement* saved, bool persist = true);
     bool restoreSaved (const juce::XmlElement* saved);
 
     juce::AudioProcessor& processor;
