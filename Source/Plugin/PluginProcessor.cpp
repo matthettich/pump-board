@@ -1,6 +1,5 @@
 #include "Plugin/PluginProcessor.h"
 #include "Plugin/PluginEditor.h"
-#include "Control/MidiClock.h"
 #include <cmath>
 
 namespace pb
@@ -305,13 +304,13 @@ bool PluginProcessor::updateHostTempo()
 
                 // The host owns the board's tempo while it reports one. A MIDI clock on the same block keeps
                 // measuring, but must not overwrite what the host just said (card 8.6).
-                clock::setHostTempoOwns (true);
+                session.getProcessor().getMidiClock().setHostTempoOwns (true);
                 return true;
             }
         }
     }
 
-    clock::setHostTempoOwns (false);
+    session.getProcessor().getMidiClock().setHostTempoOwns (false);
     return false;
 }
 

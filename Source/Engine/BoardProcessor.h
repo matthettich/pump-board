@@ -2,6 +2,7 @@
 // SCAFFOLD — fixed interface. Do not change without review.
 #include "Engine/ChainSnapshot.h"
 #include "Engine/SafetyLimiter.h"
+#include "Control/MidiClock.h"
 #include "Control/ParameterRegistry.h"
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <atomic>
@@ -67,9 +68,13 @@ public:
     static int maxDryDelayFor (double sampleRate) noexcept;
     int getMaxDryDelay() const noexcept { return maxDryDelay; }
 
+    // This board's own MIDI clock measurement (card 5.32). One per processor, so two plugin instances do not share it.
+    MidiClock& getMidiClock() noexcept { return midiClock; }
+
 private:
     ParameterRegistry& registry;
     MidiRouter& midiRouter;
+    MidiClock midiClock;                        // audio thread observes; the flags other threads read are atomic
 
     std::atomic<ChainSnapshot*> active { nullptr };
     std::atomic<uint64_t> blocksProcessed { 0 };

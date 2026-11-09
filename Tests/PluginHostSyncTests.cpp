@@ -91,8 +91,6 @@ public:
 
         beginTest ("a running MIDI clock does not fight a host tempo");
         {
-            pb::clock::reset();
-
             pb::PluginProcessor processor;
             FixedTempoPlayHead playHead (90.0);
             processor.setPlayHead (&playHead);
@@ -108,15 +106,10 @@ public:
 
             processor.setPlayHead (nullptr);
 
-            // "The host owns the tempo" is process-wide clock state, and nothing here runs another block to clear it.
-            // Left set, it would silently stop the MIDI clock writing in whichever suite runs next.
-            pb::clock::setHostTempoOwns (false);
         }
 
         beginTest ("with no host tempo, the MIDI clock still sets the tempo");
         {
-            pb::clock::reset();
-
             pb::PluginProcessor processor;
             processor.prepareToPlay (48000.0, 25000);
 
