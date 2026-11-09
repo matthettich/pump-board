@@ -1,6 +1,8 @@
 #include "Common/AllocationGuard.h"
 #include "Effects/EffectRegistry.h"
 #include "Plugin/PluginProcessor.h"
+#include "Engine/Slot.h"
+#include <cmath>
 
 namespace
 {
@@ -45,6 +47,39 @@ bool pumpTimersUntil (Predicate&& condition, int timeoutMs = 2000)
 pb::PluginParameter* parameterFor (pb::PluginProcessor& processor, const juce::String& paramId)
 {
     return processor.getAutomation().find (paramId);
+}
+
+// Silence out, and a reported latency: whatever comes out of a bypassed board is only the delayed dry copy.
+class LatentSilentFx final : public pb::IEffect
+{
+public:
+    explicit LatentSilentFx (int latencyIn) : latency (latencyIn) {}
+
+    juce::String typeId() const override { return "test.latent"; }
+    juce::String displayName() const override { return "Test Latent"; }
+    std::vector<pb::ParamInfo> params() const override { return {}; }
+    void prepare (double, int, int) override {}
+    void reset() override {}
+    void setParam (int, float) noexcept override {}
+    void process (juce::AudioBuffer<float>& buffer) noexcept override { buffer.clear(); }
+    int latencySamples() const noexcept override { return latency; }
+
+private:
+    int latency;
+};
+
+// Puts a silent, latent pedal alone on the processor's board, so wet is silence and dry is the (delayed) input.
+std::unique_ptr<pb::Slot> publishSilentChain (pb::PluginProcessor& processor, int latency)
+{
+    auto slot = std::make_unique<pb::Slot> ("test-latent", processor.getSession().getRegistry());
+    slot->setEffect (std::make_unique<LatentSilentFx> (latency));
+    slot->prepare (48000.0, 64);
+
+    auto snapshot = std::make_unique<pb::ChainSnapshot>();
+    snapshot->order[0] = slot.get();
+    snapshot->count = 1;
+    processor.getSession().getProcessor().publish (std::move (snapshot));
+    return slot;
 }
 
 float macroValue (pb::PluginProcessor& processor, int macro)
@@ -94,6 +129,162 @@ public:
 
             bypass->setValueNotifyingHost (0.0f);
             expect (! processor.getSession().isBoardBypassed());
+        }
+
+        beginTest ("the host's bypass parameter is Board Bypass, with the id it always had");
+        {
+            pb::PluginProcessor processor;
+
+            auto* hostBypass = processor.getBypassParameter();
+            expect (hostBypass != nullptr);
+            expect (hostBypass == parameterFor (processor, "board/bypass"));
+
+            if (auto* withId = dynamic_cast<juce::AudioProcessorParameterWithID*> (hostBypass))
+                expectEquals (withId->paramID, juce::String ("board/bypass"));
+            else
+                expect (false, "the bypass parameter has no id");
+
+            // One parameter with that id, so a host does not see a second Bypass beside it, and the list is the same
+            // size as before.
+            int withThatId = 0;
+
+            for (auto* parameter : processor.getParameters())
+                if (auto* withId = dynamic_cast<juce::AudioProcessorParameterWithID*> (parameter))
+                    withThatId += withId->paramID == "board/bypass" ? 1 : 0;
+
+            expectEquals (withThatId, 1);
+            expectEquals (processor.getParameters().size(), 8 + 3 + pb::PluginParameters::kNumSlots);
+
+            // Written the way a host writes it, it reaches the board's own switch.
+            if (hostBypass != nullptr)
+            {
+                hostBypass->setValue (1.0f);
+                expect (processor.getSession().isBoardBypassed());
+                hostBypass->setValue (0.0f);
+                expect (! processor.getSession().isBoardBypassed());
+            }
+        }
+
+        beginTest ("a host bypass goes through the board's fade, not a cut");
+        {
+            pb::PluginProcessor processor;
+            processor.prepareToPlay (48000.0, 64);
+            auto slot = publishSilentChain (processor, 0);
+            auto* hostBypass = processor.getBypassParameter();
+            expect (hostBypass != nullptr);            // the rest of this test is skipped, not crashed, without it
+
+            juce::AudioBuffer<float> buffer (2, 64);
+            juce::MidiBuffer midi;
+
+            auto runBlock = [&] (float input)
+            {
+                for (int ch = 0; ch < 2; ++ch)
+                    for (int i = 0; i < 64; ++i)
+                        buffer.setSample (ch, i, input);
+
+                processor.processBlock (buffer, midi);
+            };
+
+            for (int i = 0; i < 12; ++i)
+                runBlock (0.5f);
+
+            expectWithinAbsoluteError (buffer.getSample (0, 63), 0.0f, 1.0e-3f);   // the wet path is silence
+
+            if (hostBypass != nullptr) hostBypass->setValue (1.0f);               // the host's own bypass button
+            runBlock (0.5f);
+
+            // A cut to dry would put 0.5 here at once; the fade starts at the wet end.
+            expectLessThan (buffer.getSample (0, 0), 0.05f);
+            expectGreaterThan (buffer.getSample (0, 63), buffer.getSample (0, 0));
+
+            for (int i = 0; i < 12; ++i)
+                runBlock (0.5f);
+
+            expectWithinAbsoluteError (buffer.getSample (0, 63), 0.5f, 1.0e-3f);   // fully dry after ~10 ms
+
+            // ...and back again the same way.
+            if (hostBypass != nullptr) hostBypass->setValue (0.0f);
+            runBlock (0.5f);
+            expectGreaterThan (buffer.getSample (0, 0), 0.45f);
+            expectLessThan (buffer.getSample (0, 63), buffer.getSample (0, 0));
+        }
+
+        beginTest ("a host-bypassed board still delays its dry signal by the chain's latency");
+        {
+            pb::PluginProcessor processor;
+            processor.prepareToPlay (48000.0, 64);
+            constexpr int latency = 200;
+            auto slot = publishSilentChain (processor, latency);
+            auto* hostBypass = processor.getBypassParameter();
+            expect (hostBypass != nullptr);
+
+            if (hostBypass != nullptr)
+                hostBypass->setValue (1.0f);
+
+            juce::AudioBuffer<float> buffer (2, 64);
+            juce::MidiBuffer midi;
+
+            for (int i = 0; i < 20; ++i)             // settle the fade
+            {
+                buffer.clear();
+                processor.processBlock (buffer, midi);
+            }
+
+            int firstFrame = -1;
+
+            for (int block = 0; block < 8 && firstFrame < 0; ++block)
+            {
+                buffer.clear();
+
+                if (block == 0)
+                {
+                    buffer.setSample (0, 0, 0.5f);
+                    buffer.setSample (1, 0, 0.5f);
+                }
+
+                processor.processBlock (buffer, midi);
+
+                for (int i = 0; i < 64 && firstFrame < 0; ++i)
+                    if (std::abs (buffer.getSample (0, i)) > 0.25f)
+                        firstFrame = block * 64 + i;
+            }
+
+            // The wrapper's default cut-to-dry would return it at frame 0, one block late for every other pedal.
+            expectEquals (firstFrame, latency);
+        }
+
+        beginTest ("a restore under a host bypass leaves it bypassed, and does not announce the fade");
+        {
+            pb::PluginProcessor source;
+            source.getSession().getMacros().setName (5, "HOSTBYP");
+
+            juce::MemoryBlock saved;
+            source.getStateInformation (saved);
+
+            pb::PluginProcessor live;
+            live.prepareToPlay (48000.0, 128);
+            auto* hostBypass = live.getBypassParameter();
+            expect (hostBypass != nullptr);
+
+            if (hostBypass != nullptr)
+                hostBypass->setValue (1.0f);            // the host's bypass is already on
+
+            ChangeCounter counter;
+
+            if (hostBypass != nullptr)
+                hostBypass->addListener (&counter);
+
+            live.setStateInformation (saved.getData(), (int) saved.getSize());
+
+            expect (pumpTimersUntil ([&live] { return live.getSession().getMacros().getName (5) == "HOSTBYP"; }));
+            live.getAutomation().poll();
+
+            expect (live.getSession().isBoardBypassed());          // the restore did not take the host's bypass off
+            expectEquals (hostBypass != nullptr ? hostBypass->getValue() : -1.0f, 1.0f);
+            expectEquals (counter.changes, 0);
+
+            if (hostBypass != nullptr)
+                hostBypass->removeListener (&counter);
         }
 
         beginTest ("a change made in the board is announced to the host once");

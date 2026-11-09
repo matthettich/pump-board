@@ -27,6 +27,11 @@ public:
     // to keep rendering after a stop, so zero would cut a reverb off mid-flight.
     double getTailLengthSeconds() const override { return 8.0; }
 
+    // The host's own bypass is Board Bypass. A wrapper that is given a bypass parameter always calls processBlock and
+    // never processBlockBypassed, so the board's 10 ms fade and its latency-matched dry copy do the bypassing, not the
+    // host's cut to dry. The parameter id (`board/bypass`) is the one it always had, so saved projects still find it.
+    juce::AudioProcessorParameter* getBypassParameter() const override;
+
     juce::AudioProcessorEditor* createEditor() override;      // card 8.5
     bool hasEditor() const override { return true; }
 

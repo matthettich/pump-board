@@ -93,6 +93,11 @@ void PluginProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
     session.getProcessor().processBlock (buffer, midi);
 }
 
+juce::AudioProcessorParameter* PluginProcessor::getBypassParameter() const
+{
+    return parameters.find ("board/bypass");
+}
+
 juce::AudioProcessorEditor* PluginProcessor::createEditor()
 {
     // Card 8.5: the same board the app window draws, with the plugin's answers behind the HostServices seam. What
