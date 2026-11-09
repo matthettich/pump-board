@@ -14,6 +14,11 @@ juce::File presetBoardsDirectory();
 // appear in the preset list (it would take a program number that is not a preset).
 juce::File workingBoardFile();
 
+// A working board that could not be read (damaged, or saved by a newer build) is moved aside to
+// "<name>.unreadable" (numbered if that is taken) so the next autosave does not destroy it. Returns the kept file, or an
+// empty File when there was nothing to keep or it could not be moved.
+juce::File setAsideUnreadable (const juce::File& file);
+
 class PresetManager
 {
 public:

@@ -72,7 +72,15 @@ void LearnController::sourceCaptured (const MappingSource& source)
 
 ActionType LearnController::defaultActionFor (int paramIndex) const
 {
-    return registry.info (paramIndex).isToggle ? ActionType::Toggle : ActionType::SetValue;
+    if (! registry.info (paramIndex).isToggle)
+        return ActionType::SetValue;
+
+    // MidiRouter's Toggle flips on a note-on or a key press only, so a CC footswitch learned with Toggle would never
+    // do anything. The threshold (on at 64 and up, off below) is what a CC switch means.
+    if (pending && pendingSourceValue.type == SourceType::CC)
+        return ActionType::CCThreshold;
+
+    return ActionType::Toggle;
 }
 
 void LearnController::commitPending (ActionType action)

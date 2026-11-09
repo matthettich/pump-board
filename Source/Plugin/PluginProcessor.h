@@ -27,6 +27,11 @@ public:
     // to keep rendering after a stop, so zero would cut a reverb off mid-flight.
     double getTailLengthSeconds() const override { return 8.0; }
 
+    // The host's own bypass is Board Bypass. A wrapper that is given a bypass parameter always calls processBlock and
+    // never processBlockBypassed, so the board's 10 ms fade and its latency-matched dry copy do the bypassing, not the
+    // host's cut to dry. The parameter id (`board/bypass`) is the one it always had, so saved projects still find it.
+    juce::AudioProcessorParameter* getBypassParameter() const override;
+
     juce::AudioProcessorEditor* createEditor() override;      // card 8.5
     bool hasEditor() const override { return true; }
 
@@ -46,6 +51,8 @@ public:
 private:
     void timerCallback() override;
     void beginStateRestore (const juce::var& state);
+    void landPendingState();             // applies a waiting restore now; its fade is over, or there is no audio to fade
+    void setBoardBypassedQuietly (bool); // the restore's own fade: not announced to the host
     void afterBoardRestored();
     void notifyHostOfChainChange();      // message thread, or handed to it when a host restores off-thread
     bool updateHostTempo();
@@ -54,7 +61,9 @@ private:
     PluginSession session;
     PluginParameters parameters;    // card 8.4: the automation surface, built from the session's own registry
 
-    // A restore waits one fade behind the bypass, so the swap never lands on a live chain.
+    // A restore waits one fade behind the bypass, so the swap never lands on a live chain. Guarded: a host may call
+    // setStateInformation from a thread of its own while the message thread's timer lands the one before it.
+    juce::CriticalSection pendingLock;
     juce::var pendingState;
     juce::int64 pendingStateDueMs = 0;
     bool pendingStateUnbypass = false;

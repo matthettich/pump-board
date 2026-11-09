@@ -36,7 +36,7 @@ AudioEngine::~AudioEngine()
     shutdown();
 }
 
-bool AudioEngine::open (int numInputs, int numOutputs, int bufferSize, const juce::XmlElement* saved)
+bool AudioEngine::open (int numInputs, int numOutputs, int bufferSize, const juce::XmlElement* saved, bool persist)
 {
     deviceManager.closeAudioDevice();
 
@@ -67,14 +67,19 @@ bool AudioEngine::open (int numInputs, int numOutputs, int bufferSize, const juc
     }
 
     lastError.clear();
-    saveSetup();
+
+    if (persist)
+        saveSetup();
+
     return true;
 }
 
 bool AudioEngine::restoreSaved (const juce::XmlElement* saved)
 {
-    // Open something first: the manager needs a live device before it can be pointed at another one.
-    if (! open (2, 2, kPreferredBufferSize, nullptr))
+    // Open something first: the manager needs a live device before it can be pointed at another one. This stand-in
+    // is not written to audio.xml: it used to be, which replaced the saved setup with the default device before it
+    // was even tried, so the interface was forgotten after one launch (and for good if it was unplugged that day).
+    if (! open (2, 2, kPreferredBufferSize, nullptr, false))
         return false;
 
     juce::AudioDeviceManager::AudioDeviceSetup setup;
@@ -106,7 +111,7 @@ bool AudioEngine::restoreSaved (const juce::XmlElement* saved)
     usedFallback = true;
 
     if (deviceManager.getCurrentAudioDevice() == nullptr)
-        return open (2, 2, kFallbackBufferSize, nullptr);
+        return open (2, 2, kFallbackBufferSize, nullptr, false);
 
     return true;
 }
@@ -150,6 +155,11 @@ bool AudioEngine::initialise()
 
 void AudioEngine::shutdown()
 {
+    // Nothing else writes audio.xml after launch, so a device picked in Settings is remembered from here. Not after a
+    // fallback launch: the setup in use then is the stand-in, and the file still holds the interface that was missing.
+    if (! usedFallback)
+        saveSetup();
+
     deviceManager.removeAudioCallback (&player);
     deviceManager.closeAudioDevice();
     player.setProcessor (nullptr);

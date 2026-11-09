@@ -7,6 +7,7 @@
 #include "Control/MidiRouter.h"
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 namespace pb
 {
@@ -113,7 +114,13 @@ bool BoardProcessor::detachChain (int timeoutMs)
 void BoardProcessor::collectGarbage()
 {
     // A snapshot retired during block N can still be in use until block N+1 ends, so it goes at N+2.
-    const auto now = blocksProcessed.load (std::memory_order_acquire);
+    auto now = blocksProcessed.load (std::memory_order_acquire);
+
+    // The counter only moves while the device calls back. With the device stopped (releaseResources has run, which
+    // the player does under the lock the audio callback takes) or never started, no block can be reading anything,
+    // and waiting for two more would keep every retired slot - and the params it holds - alive for good.
+    if (! deviceRunning.load (std::memory_order_acquire))
+        now = std::numeric_limits<uint64_t>::max() - 2;
 
     retireList.erase (std::remove_if (retireList.begin(), retireList.end(),
                                       [now] (const Retired& retired)
@@ -183,7 +190,7 @@ void BoardProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiB
 
     // Card 5.32: a running MIDI clock moves `board/tempo`, here and before the tempo is handed to the pedals, so a
     // clock change reaches them on the same block. Allocation-free: the index is cached inside the clock.
-    pb::clock::observe (midi, buffer.getNumSamples(), registry, getSampleRate());
+    midiClock.observe (midi, buffer.getNumSamples(), registry, getSampleRate(), tempoIndex);
 
     // The board's tempo, handed to the pedals that follow it. Only when it changes, so a steady tempo is free.
     // The cast happens here and only here, on a tempo change rather than every block.

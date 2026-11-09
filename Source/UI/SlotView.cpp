@@ -132,11 +132,12 @@ void SlotView::paint (juce::Graphics& g)
     g.setColour (withAlpha (theme.ink, 0.55f));
     g.drawEllipse (led, 1.0f);
 
-    // card 5.24: how much of the block this slot spends, a thin bar just above the footswitch. Only drawn once it
-    // has been measured, so an empty or freshly built slot is unchanged.
+    // card 5.24: how much of the block this slot spends, a thin bar. Only drawn once it has been measured, so an
+    // empty or freshly built slot is unchanged. It sits in the gap between the category line (y 28..40) and the first
+    // value line (y 47..59): at bottom - 40 (y 64 on a 104 pt card) it ran through the second value line (y 60..72).
     if (load > 0.0005f)
     {
-        const auto bar = juce::Rectangle<float> (r.getX() + 10.0f, r.getBottom() - 40.0f, r.getWidth() - 20.0f, 3.0f);
+        const auto bar = juce::Rectangle<float> (r.getX() + 10.0f, r.getY() + 42.5f, r.getWidth() - 20.0f, 3.0f);
 
         g.setColour (withAlpha (theme.ink, 0.16f));
         g.fillRect (bar);

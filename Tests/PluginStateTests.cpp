@@ -77,6 +77,23 @@ bool pumpTimersUntil (Predicate&& condition, int timeoutMs = 2000)
     }
 }
 
+// Counts what the host would be told about one parameter.
+class ChangeCounter final : public juce::AudioProcessorParameter::Listener
+{
+public:
+    void parameterValueChanged (int, float) override { ++changes; }
+    void parameterGestureChanged (int, bool) override {}
+    int changes = 0;
+};
+
+// The board document inside a host state, which is what two states are compared on: the envelope's text can differ in
+// formatting without the board differing.
+juce::String boardTextIn (const juce::MemoryBlock& state)
+{
+    const auto parsed = juce::JSON::parse (juce::String::fromUTF8 ((const char*) state.getData(), (int) state.getSize()));
+    return parsed.getProperty ("board", juce::var()).toString();
+}
+
 class PluginStateTests final : public juce::UnitTest
 {
 public:
@@ -190,6 +207,91 @@ public:
             live.getSession().getProcessor().processBlock (buffer, midi);
 
             expect (std::isfinite (buffer.getSample (0, 0)));
+        }
+
+        beginTest ("a state that will not read is refused before the board is bypassed for it");
+        {
+            pb::PluginProcessor live;
+            live.prepareToPlay (48000.0, 128);                     // the fade timer is running: a restore would wait
+
+            const auto before = boardJsonOf (live.getSession());
+            const auto bad = envelope ("pumpboard-plugin-state", 1, "not a board");
+
+            live.setStateInformation (bad.toRawUTF8(), (int) bad.getNumBytesAsUTF8());
+
+            // It used to bypass the board, wait out the fade, find the board unreadable and bring it back: an audible
+            // dip for a project file that was never going to change anything.
+            expect (! live.getSession().isBoardBypassed());
+            expect (live.getSession().getLastRestoreError().isNotEmpty());
+            expect (boardJsonOf (live.getSession()) == before);
+        }
+
+        beginTest ("a host that asks for state while a restore waits is given the state it just set");
+        {
+            pb::PluginProcessor source;
+            source.getSession().getMacros().setName (2, "WAITING");
+
+            juce::MemoryBlock saved;
+            source.getStateInformation (saved);
+
+            pb::PluginProcessor live;
+            live.prepareToPlay (48000.0, 128);
+            live.setStateInformation (saved.getData(), (int) saved.getSize());
+            expect (live.getSession().isBoardBypassed());          // still waiting behind the fade
+
+            juce::MemoryBlock asked;
+            live.getStateInformation (asked);
+
+            // A host that saves straight after loading (an undo point, a preset store) would otherwise write the
+            // board that was just replaced.
+            expect (boardTextIn (asked) == boardTextIn (saved), "the state handed back was the old board");
+        }
+
+        beginTest ("deactivating the plugin lands a restore that was still waiting");
+        {
+            pb::PluginProcessor source;
+            source.getSession().getMacros().setName (3, "LANDED");
+
+            juce::MemoryBlock saved;
+            source.getStateInformation (saved);
+
+            pb::PluginProcessor live;
+            live.prepareToPlay (48000.0, 128);
+            live.setStateInformation (saved.getData(), (int) saved.getSize());
+
+            // releaseResources stops the timer that would have landed it: the board stayed bypassed and the restore
+            // was never applied, until some later prepareToPlay.
+            live.releaseResources();
+
+            expect (! live.getSession().isBoardBypassed());
+            expectEquals (live.getSession().getMacros().getName (3), juce::String ("LANDED"));
+        }
+
+        beginTest ("the bypass behind a restore is not reported to the host as automation");
+        {
+            pb::PluginProcessor source;
+            source.getSession().getMacros().setName (4, "QUIET");
+
+            juce::MemoryBlock saved;
+            source.getStateInformation (saved);
+
+            pb::PluginProcessor live;
+            live.prepareToPlay (48000.0, 128);
+
+            auto* bypass = live.getAutomation().find ("board/bypass");
+            ChangeCounter counter;
+            bypass->addListener (&counter);
+
+            live.setStateInformation (saved.getData(), (int) saved.getSize());
+
+            expect (pumpTimersUntil ([&live] { return ! live.getSession().isBoardBypassed(); }));
+            live.getAutomation().poll();
+
+            // The fade is the plugin's own doing. A host in a write mode would have recorded it as a move of the
+            // Board Bypass lane, once to 1 and once back to 0.
+            expectEquals (counter.changes, 0);
+
+            bypass->removeListener (&counter);
         }
     }
 

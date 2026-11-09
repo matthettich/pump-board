@@ -23,6 +23,16 @@ juce::File workingBoardFile()
     return presetRoot().getChildFile ("current.board");
 }
 
+juce::File setAsideUnreadable (const juce::File& file)
+{
+    if (! file.existsAsFile())
+        return {};
+
+    const auto kept = file.getParentDirectory().getNonexistentChildFile (file.getFileName(), ".unreadable", false);
+
+    return file.moveFileTo (kept) ? kept : juce::File();
+}
+
 PresetManager::PresetManager (juce::File directoryIn) : directory (std::move (directoryIn)) {}
 
 PresetManager PresetManager::forApp()

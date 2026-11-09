@@ -65,7 +65,7 @@ PluginEditor::PluginEditor (PluginProcessor& processorIn)
     // timer can touch a freed one.
     session.setEditorAttached (true);
     // A host may restore its state from a thread of its own, and re-pointing the panel is message-thread work: hand
-    // it over rather than touching components from wherever the restore arrived (CodeRabbit, PR #2).
+    // it over rather than touching components from wherever the restore arrived (review, PR #2).
     session.onBoardReplaced = [safe = juce::Component::SafePointer<PluginEditor> (this)]
     {
         const auto repoint = [safe]

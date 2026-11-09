@@ -68,6 +68,29 @@ public:
             expectGreaterThan (buffer.getMagnitude (0, 0, 4096), 0.0f);
         }
 
+        beginTest ("a zero-length block, or a buffer with no channels, is a no-op");
+        {
+            pb::PluginProcessor processor;
+            processor.prepareToPlay (48000.0, 128);
+
+            juce::MidiBuffer midi;
+
+            juce::AudioBuffer<float> empty (2, 0);
+            processor.processBlock (empty, midi);
+            expectEquals (empty.getNumSamples(), 0);
+
+            juce::AudioBuffer<float> noChannels (0, 128);
+            processor.processBlock (noChannels, midi);
+            expectEquals (noChannels.getNumChannels(), 0);
+
+            // The board is still alive afterwards: a normal block after the degenerate ones processes as before.
+            juce::AudioBuffer<float> buffer (2, 128);
+            buffer.clear();
+            buffer.setSample (0, 0, 0.1f);
+            processor.processBlock (buffer, midi);
+            expect (allFinite (buffer));
+        }
+
         beginTest ("mono in and stereo out is accepted; the reverse is not");
         {
             pb::PluginProcessor processor;

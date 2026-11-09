@@ -46,6 +46,11 @@ public:
     // truncated JSON, or a board document that will not parse.
     bool restoreState (const juce::var& state);
 
+    // Message thread. Whether restoreState() would accept this state, decided without touching the board. A restore
+    // that has to wait behind a fade asks first, so a state that was never going to apply does not bypass the board
+    // for nothing. Sets getLastRestoreError() when it says no.
+    bool canRestoreState (const juce::var& state);
+
     // Card 8.3: why the last restore was refused. A host can only see the return value, which says nothing, and
     // "the tempo is wrong" is a poor description of a state that was dropped. Empty after a restore that worked.
     const juce::String& getLastRestoreError() const noexcept { return lastRestoreError; }

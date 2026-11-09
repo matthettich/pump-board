@@ -172,7 +172,7 @@ BoardContent::~BoardContent()
     // from the live chain, so leaving the swap pending would save the chain the user was replacing and leave the board
     // bypassed with nothing left to unbypass it: the window that would have done that is the one closing. The timer
     // path is the same one used here, and it cannot run again because the swap is taken before it is called
-    // (CodeRabbit, PR #2).
+    // (review, PR #2).
     if (pendingSwap != nullptr)
     {
         auto swap = std::move (pendingSwap);
@@ -502,7 +502,7 @@ void BoardContent::forgetPedalParams (int index)
         return;
 
     // An armed or pending learn may be aimed at one of the indices about to be freed and reused: cancel it, or the
-    // next MIDI message would commit a mapping onto whatever pedal takes that index (CodeRabbit, PR #1).
+    // next MIDI message would commit a mapping onto whatever pedal takes that index (review, PR #1).
     if (learn.isLearning() || learn.hasPendingSource())
     {
         learn.cancelLearn();
@@ -1161,7 +1161,29 @@ bool BoardContent::loadWorkingBoard()
     LoadResult result;
 
     if (! presetManager.read (host.workingBoardFile(), data, result))
+    {
+        // A file that is there but cannot be read (damaged, or saved by a newer build) would be overwritten by the
+        // next autosave, whatever the app starts with instead. Keep it first, and say so. The plugin has no working
+        // file, so this is the app's path only.
+        const auto file = host.workingBoardFile();
+
+        if (file.existsAsFile())
+        {
+            const auto kept = setAsideUnreadable (file);
+            const auto reason = result.error.isNotEmpty() ? result.error : juce::String ("the file could not be read");
+
+            juce::Logger::writeToLog ("pump BOARD: could not read the last board (" + reason + "); "
+                                      + (kept.existsAsFile() ? "kept as " + kept.getFullPathName() : juce::String ("not kept")));
+
+            juce::StringArray problem;
+            problem.add (reason);
+            problem.add (kept.existsAsFile() ? "The file was kept as " + kept.getFileName() + " beside it."
+                                             : juce::String ("It could not be kept, and will be replaced."));
+            showWarnings (problem, "THE LAST BOARD COULD NOT BE READ");
+        }
+
         return false;
+    }
 
     const auto applied = pb::apply (data, model, macros, learn, registry);
 
@@ -1307,7 +1329,7 @@ juce::String BoardContent::statusLine() const
     const float boardLoad = pb::load::boardLoad();
 
     if (boardLoad > 0.005f)
-        text << "    LOAD " << juce::String (juce::jmin (100.0f, boardLoad * 100.0f), 0) << "%";
+        text << "    LOAD " << juce::roundToInt (juce::jmin (100.0f, boardLoad * 100.0f)) << "%";   // String (x, 0) prints 6 digits
 
     if (summary.fallback)
         text << "    FALLBACK";

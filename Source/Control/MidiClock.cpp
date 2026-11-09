@@ -1,7 +1,7 @@
 #include "Control/MidiClock.h"
 #include <cmath>
 
-namespace pb::clock
+namespace pb
 {
 namespace
 {
@@ -9,61 +9,45 @@ constexpr int kClocksPerBeat = 24;            // the MIDI beat clock's own rate:
 constexpr double kMinBpm = 20.0, kMaxBpm = 300.0;
 constexpr double kSmoothing = 0.35;           // per beat, so a clock's own jitter does not show in the number
 constexpr float kWriteThreshold = 0.5f;       // BPM: below this a new beat is not worth a registry write
-
-struct State
-{
-    const ParameterRegistry* registeredWith = nullptr;   // the registry the cached index belongs to
-    int tempoIndex = ParameterRegistry::kInvalid;
-
-    double sampleRate = 48000.0;
-    juce::int64 samplePos = 0;        // samples since the clock last started
-    juce::int64 lastClockPos = -1;    // -1: no clock yet
-    juce::int64 beatStartPos = -1;
-    int clocksThisBeat = 0;
-
-    double measured = 0.0;            // the last beat's own BPM, unsmoothed
-    double smoothed = 0.0;            // 0: nothing measured yet
-    float written = -1.0f;            // the value this clock last put in the registry
-    bool running = false;
-    bool hostOwnsTempo = false;       // the plugin's host reports a tempo; this clock must not write (card 8.6)
-};
-
-State state;                          // file scope: no initialisation guard on the audio thread
 } // namespace
 
-void reset() noexcept
+void MidiClock::reset() noexcept
 {
-    auto& s = state;
-
-    s.samplePos = 0;
-    s.lastClockPos = -1;
-    s.beatStartPos = -1;
-    s.clocksThisBeat = 0;
-    s.measured = 0.0;
-    s.smoothed = 0.0;
-    s.written = -1.0f;
-    s.running = false;
+    samplePos = 0;
+    lastClockPos = -1;
+    beatStartPos = -1;
+    clocksThisBeat = 0;
+    measured.store (0.0, std::memory_order_relaxed);
+    smoothed = 0.0;
+    written = -1.0f;
+    running.store (false, std::memory_order_relaxed);
 }
 
-bool isRunning() noexcept { return state.running; }
-
-double lastMeasuredBpm() noexcept { return state.measured; }
-
-bool observe (const juce::MidiBuffer& midi, int numSamples, ParameterRegistry& registry, double sampleRate) noexcept
+bool MidiClock::observe (const juce::MidiBuffer& midi, int numSamples, ParameterRegistry& registry, double rate,
+                         int tempoIdx) noexcept
 {
-    auto& s = state;
-    s.sampleRate = sampleRate > 0.0 ? sampleRate : s.sampleRate;
+    sampleRate = rate > 0.0 ? rate : sampleRate;
+
+    // A host-owns change made on another thread asks for the written value to be forgotten; it is applied here, where
+    // `written` lives.
+    if (forgetWritten.exchange (false, std::memory_order_acq_rel))
+        written = -1.0f;
 
     bool wrote = false;
 
     for (const auto metadata : midi)
     {
+        // Clock, start, continue and stop are one byte. Anything over four bytes (SysEx) would be heap-allocated by
+        // getMessage(), which the audio thread must not do; anything over three cannot be one of these anyway.
+        if (metadata.numBytes < 1 || metadata.numBytes > 3)
+            continue;
+
         const auto message = metadata.getMessage();
 
         if (message.isMidiStart() || message.isMidiContinue())
         {
             reset();
-            state.running = true;
+            running.store (true, std::memory_order_relaxed);
             continue;
         }
 
@@ -76,86 +60,91 @@ bool observe (const juce::MidiBuffer& midi, int numSamples, ParameterRegistry& r
         if (! message.isMidiClock())
             continue;
 
-        state.running = true;
+        running.store (true, std::memory_order_relaxed);
 
-        const juce::int64 pos = state.samplePos + (juce::int64) metadata.samplePosition;
+        const juce::int64 pos = samplePos + (juce::int64) metadata.samplePosition;
 
-        if (state.lastClockPos >= 0)
+        if (lastClockPos >= 0)
         {
-            const juce::int64 interval = pos - state.lastClockPos;
+            const juce::int64 interval = pos - lastClockPos;
 
             // Two seconds between clocks is not a slow tempo, it is a clock that stopped: start the beat again
             // rather than average a pause into it. Two clocks on the same sample (a coalesced USB burst) are still two
             // ticks of the beat, not a restart: only time running backwards restarts it.
-            if (interval < 0 || interval > (juce::int64) (2.0 * state.sampleRate))
+            if (interval < 0 || interval > (juce::int64) (2.0 * sampleRate))
             {
-                state.beatStartPos = pos;
-                state.clocksThisBeat = 0;
-                state.smoothed = 0.0;
+                beatStartPos = pos;
+                clocksThisBeat = 0;
+                smoothed = 0.0;
             }
-            else if (state.beatStartPos < 0)
+            else if (beatStartPos < 0)
             {
-                state.beatStartPos = pos;
-                state.clocksThisBeat = 0;
+                beatStartPos = pos;
+                clocksThisBeat = 0;
             }
-            else if (++state.clocksThisBeat >= kClocksPerBeat)
+            else if (++clocksThisBeat >= kClocksPerBeat)
             {
-                const auto beat = pos - state.beatStartPos;
+                const auto beat = pos - beatStartPos;
 
                 if (beat > 0)
                 {
                     const double bpm = juce::jlimit (kMinBpm, kMaxBpm,
-                                                     60.0 * state.sampleRate / (double) beat);
+                                                     60.0 * sampleRate / (double) beat);
 
-                    state.measured = bpm;
-                    state.smoothed = state.smoothed <= 0.0 ? bpm
-                                                           : state.smoothed + kSmoothing * (bpm - state.smoothed);
+                    measured.store (bpm, std::memory_order_relaxed);
+                    smoothed = smoothed <= 0.0 ? bpm : smoothed + kSmoothing * (bpm - smoothed);
 
-                    // The index is looked up once per registry, never per beat: find() compares strings, which is
-                    // not something to do on the audio thread every half second.
-                    if (state.registeredWith != &registry)
+                    // The caller's index when it has one. Otherwise it is looked up once per registry, never per
+                    // beat (find() compares strings, and the literal builds a String: neither belongs on the audio
+                    // thread, which is why BoardProcessor passes its own).
+                    if (tempoIdx != ParameterRegistry::kInvalid)
                     {
-                        state.registeredWith = &registry;
-                        state.tempoIndex = registry.find ("board/tempo");
+                        registeredWith = &registry;
+                        tempoIndex = tempoIdx;
+                    }
+                    else if (registeredWith != &registry)
+                    {
+                        registeredWith = &registry;
+                        tempoIndex = registry.find ("board/tempo");
                     }
 
-                    const auto target = (float) state.smoothed;
+                    const auto target = (float) smoothed;
 
-                    if (! state.hostOwnsTempo
-                        && state.tempoIndex != ParameterRegistry::kInvalid
-                        && (state.written < 0.0f || std::abs (target - state.written) >= kWriteThreshold))
+                    if (! hostOwnsTempo.load (std::memory_order_relaxed)
+                        && tempoIndex != ParameterRegistry::kInvalid
+                        && (written < 0.0f || std::abs (target - written) >= kWriteThreshold))
                     {
-                        registry.set (state.tempoIndex, target);
-                        state.written = target;
+                        registry.set (tempoIndex, target);
+                        written = target;
                         wrote = true;
                     }
                 }
 
-                state.beatStartPos = pos;
-                state.clocksThisBeat = 0;
+                beatStartPos = pos;
+                clocksThisBeat = 0;
             }
         }
         else
         {
-            state.beatStartPos = pos;
-            state.clocksThisBeat = 0;
+            beatStartPos = pos;
+            clocksThisBeat = 0;
         }
 
-        state.lastClockPos = pos;
+        lastClockPos = pos;
     }
 
     if (numSamples > 0)
-        state.samplePos += (juce::int64) numSamples;
+        samplePos += (juce::int64) numSamples;
 
     return wrote;
 }
 
-void setHostTempoOwns (bool owns) noexcept
+void MidiClock::setHostTempoOwns (bool owns) noexcept
 {
-    state.hostOwnsTempo = owns;
+    hostOwnsTempo.store (owns, std::memory_order_relaxed);
 
     // Forget what this clock last wrote, so a clock that takes the tempo back from a host is not silent just because
     // the number it measures happens to match. The flag itself survives reset(): it is a mode, not clock state.
-    state.written = -1.0f;
+    forgetWritten.store (true, std::memory_order_release);
 }
-} // namespace pb::clock
+} // namespace pb
