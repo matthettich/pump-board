@@ -184,10 +184,11 @@ PluginParameters::PluginParameters (ParameterRegistry& registryIn, MacroBank& ma
       model (modelIn)
 {
     const auto add = [this] (juce::String paramId, juce::String paramName, PluginParameter::Kind kind,
-                             float minValue, float maxValue, float defaultValue, int registryIndex)
+                             float minValue, float maxValue, float defaultValue, int registryIndex,
+                             juce::String suffix = {})
     {
         auto* parameter = new PluginParameter (registry, std::move (paramId), std::move (paramName), kind,
-                                               minValue, maxValue, defaultValue, registryIndex);
+                                               minValue, maxValue, defaultValue, registryIndex, std::move (suffix));
         parameters.push_back (parameter);
         return parameter;
     };
@@ -206,10 +207,12 @@ PluginParameters::PluginParameters (ParameterRegistry& registryIn, MacroBank& ma
             minValue = entry.minValue;
             maxValue = entry.maxValue;
             defaultValue = entry.defaultValue;
-            suffix = entry.displayName == "Input trim" || entry.displayName == "Output trim" ? " dB" : juce::String();
+            // By id: this used to compare the display name against a differently-cased string, which never matched,
+            // and the suffix was computed and then never handed to the parameter, so a host showed a bare number.
+            suffix = paramId == "board/inputTrim" || paramId == "board/outputTrim" ? " dB" : juce::String();
         }
 
-        return add (paramId, paramName, kind, minValue, maxValue, defaultValue, index);
+        return add (paramId, paramName, kind, minValue, maxValue, defaultValue, index, suffix);
     };
 
     // The macros first, so a host's generic list opens on the eight knobs a player automates.

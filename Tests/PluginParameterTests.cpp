@@ -195,6 +195,20 @@ public:
                     "the macro moved but its target stayed at " + juce::String (registry.get (target)));
         }
 
+        beginTest ("the trims are shown in decibels and the macros as percentages");
+        {
+            pb::PluginProcessor processor;
+
+            // Half way along -24..+12 dB is -6 dB; a host's generic editor prints exactly this text.
+            for (const char* id : { "board/inputTrim", "board/outputTrim" })
+            {
+                const auto text = parameterFor (processor, id)->getText (0.5f, 0);
+                expect (text.endsWith ("dB"), juce::String (id) + " reads '" + text + "'");
+            }
+
+            expectEquals (parameterFor (processor, "macro/0")->getText (0.5f, 0), juce::String ("50%"));
+        }
+
         beginTest ("a full automation pass allocates nothing");
         {
             pb::PluginProcessor processor;
