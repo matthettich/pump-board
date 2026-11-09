@@ -827,8 +827,9 @@ Scope: `Source/Engine`, `Control`, the adapters, `Presets`, `App`, then `UI`, pl
 re-checked against the code. The owner was asleep, so every call below was the conservative one. No scaffold header
 was touched (`AudioEngine.h`, `MidiClock.h` and `PresetManager.h` carry no scaffold marker). Nothing in `external/pump`
 was edited. Baseline before any change: 3216 expectations, 0 failing (Debug, Linux); after: 3289, 0 failing, 73 of them
-the new `Tests/AuditFixesTests.cpp`. Seven of its eight scenarios were run against the unfixed code and the five that
-can fail did (the clock-index one does not compile without the new argument; the SysEx one cannot fail, see below).
+the new `Tests/AuditFixesTests.cpp`. With the garbage-collection, target-parsing and learn-default fixes reverted, the three
+matching scenarios failed (5 expectations); the clock-index one does not compile without its new argument, the
+set-aside one needs its new function, and the SysEx one cannot fail (see below).
 
 **Fixed (commit, where, what went wrong)**
 - `b16f8f8` `MidiRouter.cpp` `handle`, `MidiClock.cpp` `observe`: `getMessage()` copies the bytes into an owning message
@@ -851,7 +852,7 @@ can fail did (the clock-index one does not compile without the new argument; the
 - `8eb214c` `AudioEngine`: `restoreSaved` opened a stand-in device through `open()`, which wrote `audio.xml`, so the saved
   setup was overwritten before it was tried (the interface was forgotten after one launch), and nothing ever saved a
   device picked in Settings. Stand-in no longer persists; `shutdown()` saves, except after a fallback launch.
-  The 2 Nov check ("a planted 128-sample setup came back as 128") only proved the first read, which is why it passed.
+  The card-0.2 check ("a planted 128-sample setup came back as 128") only proved the first read, which is why it passed.
 - `3cc2234` status line printed `LOAD 36.9914%` (`String (x, 0)` means "as many digits as needed"); the slot load bar
   sat inside the second value line. Both were `HANDOVER` items 4 and 2. The bar's new place is by arithmetic only.
 - `1dbfee7` (test, no defect found): all 24 pedals, one at a time, with every parameter moved each block, allocate
