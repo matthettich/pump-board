@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 # Only the publish job needs a write token; the build and plugin jobs, and so everything a pull request runs, see
-# read only (CodeRabbit, PR #2).
+# read only (review, PR #2).
 permissions:
   contents: read
 
@@ -87,7 +87,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           # Only the artifact is downloaded here, so there is no checkout and no git remote for gh to infer the
-          # repository from: without this, a push to main cannot create the release. (CodeRabbit, PR #2.)
+          # repository from: without this, a push to main cannot create the release. (review, PR #2.)
           GH_REPO: ${{ github.repository }}
         run: |
           gh release delete latest --yes --cleanup-tag || true

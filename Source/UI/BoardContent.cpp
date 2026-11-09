@@ -172,7 +172,7 @@ BoardContent::~BoardContent()
     // from the live chain, so leaving the swap pending would save the chain the user was replacing and leave the board
     // bypassed with nothing left to unbypass it: the window that would have done that is the one closing. The timer
     // path is the same one used here, and it cannot run again because the swap is taken before it is called
-    // (CodeRabbit, PR #2).
+    // (review, PR #2).
     if (pendingSwap != nullptr)
     {
         auto swap = std::move (pendingSwap);
@@ -502,7 +502,7 @@ void BoardContent::forgetPedalParams (int index)
         return;
 
     // An armed or pending learn may be aimed at one of the indices about to be freed and reused: cancel it, or the
-    // next MIDI message would commit a mapping onto whatever pedal takes that index (CodeRabbit, PR #1).
+    // next MIDI message would commit a mapping onto whatever pedal takes that index (review, PR #1).
     if (learn.isLearning() || learn.hasPendingSource())
     {
         learn.cancelLearn();

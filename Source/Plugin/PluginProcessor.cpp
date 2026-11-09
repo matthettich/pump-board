@@ -57,7 +57,7 @@ void PluginProcessor::prepareToPlay (double sampleRate, int maximumExpectedSampl
     // Card 8.2: the board is edited from the message thread and snapshots are retired at N+2 blocks, so something
     // has to run collectGarbage() even when no editor is open. Most hosts prepare on their message thread; one that
     // prepares on a worker thread gets the timer started for it, on the right thread, through a weak reference so a
-    // processor destroyed in the meantime is not touched (CodeRabbit, PR #2).
+    // processor destroyed in the meantime is not touched (review, PR #2).
     if (juce::MessageManager::existsAndIsCurrentThread())
     {
         startTimerHz (30);
@@ -259,7 +259,7 @@ void PluginProcessor::afterBoardRestored()
     //
     // refreshChain() records the chain's new signature as it goes, so the timer's next tick would answer "nothing
     // changed" and a host's generic editor would keep showing the old chain after a restore. Ask for the redraw here
-    // instead (CodeRabbit, PR #2).
+    // instead (review, PR #2).
     if (parameters.refreshChain())
         notifyHostOfChainChange();
 

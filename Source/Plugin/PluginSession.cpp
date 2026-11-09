@@ -20,7 +20,7 @@ constexpr int kStateVersion = 1;
 // Two plugin instances share one process, and one registry: registering the pedals twice would assert on the second
 // instance's load, and two instances can be created at once on different threads. call_once makes that one decision
 // however many hosts race to load the plugin; the contains check stays inside it so a test binary that registered
-// the pedals itself is still respected (CodeRabbit, PR #2).
+// the pedals itself is still respected (review, PR #2).
 void ensureBuiltInEffects()
 {
     static std::once_flag once;
