@@ -122,6 +122,79 @@ public:
             expectWithinAbsoluteError (tempoOf (processor.getSession()), 120.0f, 2.0f);
         }
 
+        beginTest ("a steady MIDI clock with no host tempo writes the tempo once, not on every beat");
+        {
+            pb::PluginProcessor processor;
+            processor.prepareToPlay (48000.0, 24000);
+
+            juce::AudioBuffer<float> buffer (2, 24000);
+            buffer.clear();
+
+            // One beat per block: 24 clocks, 1000 samples apart, so the next block's first clock is one interval on.
+            auto block = [&]
+            {
+                juce::MidiBuffer clock;
+
+                for (int i = 0; i < 24; ++i)
+                    clock.addEvent (juce::MidiMessage::midiClock(), i * 1000);
+
+                processor.processBlock (buffer, clock);
+            };
+
+            for (int i = 0; i < 4; ++i)
+                block();
+
+            expectWithinAbsoluteError (tempoOf (processor.getSession()), 120.0f, 2.0f);
+            const auto counter = processor.getSession().getRegistry().changeCounter();
+
+            for (int i = 0; i < 8; ++i)
+                block();
+
+            // The host-tempo check runs every block and used to make the clock forget its last write each time, so
+            // the 0.5 BPM threshold never applied and every beat bumped the counter the editor reads as "edited".
+            expectEquals ((int) processor.getSession().getRegistry().changeCounter(), (int) counter);
+        }
+
+        beginTest ("a clock that takes the tempo back from a host writes again, even if the value matches");
+        {
+            pb::PluginProcessor processor;
+            processor.prepareToPlay (48000.0, 24000);
+
+            juce::AudioBuffer<float> buffer (2, 24000);
+            buffer.clear();
+
+            auto block = [&]
+            {
+                juce::MidiBuffer clock;
+
+                for (int i = 0; i < 24; ++i)
+                    clock.addEvent (juce::MidiMessage::midiClock(), i * 1000);
+
+                processor.processBlock (buffer, clock);
+            };
+
+            for (int i = 0; i < 4; ++i)
+                block();
+
+            const auto before = processor.getSession().getRegistry().changeCounter();
+
+            {
+                FixedTempoPlayHead playHead ((double) tempoOf (processor.getSession()));   // the very number the clock wrote
+                processor.setPlayHead (&playHead);
+                block();
+                processor.setPlayHead (nullptr);
+            }
+
+            const auto afterHost = processor.getSession().getRegistry().changeCounter();
+            expectEquals ((int) afterHost, (int) before);        // the host's tempo matched, so nothing was written
+
+            for (int i = 0; i < 3; ++i)
+                block();
+
+            // Back to the clock alone: it forgot what it wrote, so it writes once more even though the value matches.
+            expectGreaterThan ((int) processor.getSession().getRegistry().changeCounter(), (int) afterHost);
+        }
+
         beginTest ("the reported latency is the chain's sum, and the tail is not zero");
         {
             pb::PluginProcessor processor;
