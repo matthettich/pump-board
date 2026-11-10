@@ -2,7 +2,9 @@
 #include "Effects/EffectRegistry.h"
 #include "Plugin/PluginProcessor.h"
 #include "Engine/Slot.h"
+#include <atomic>
 #include <cmath>
+#include <thread>
 
 namespace
 {
@@ -398,6 +400,58 @@ public:
             }
 
             expectEquals (parameterFor (processor, "macro/0")->getText (0.5f, 0), juce::String ("50%"));
+        }
+
+        beginTest ("a macro's name is assigned only when it changes, and follows a rename");
+        {
+            pb::PluginProcessor processor;
+            processor.prepareToPlay (48000.0, 64);
+
+            auto* macro = parameterFor (processor, "macro/1");
+            const auto original = macro->getName (64);
+
+            expect (! macro->setName (original));                    // unchanged: not reassigned
+            expectEquals (macro->getName (64), original);
+
+            processor.getSession().getMacros().setName (1, "CUTOFF");
+            expect (processor.getAutomation().refreshChain());       // the host is told a name moved
+            expectEquals (macro->getName (64), juce::String ("CUTOFF"));
+            expectEquals (macro->getName (3), juce::String ("CUT"));  // and the host's length limit still applies
+
+            expect (! processor.getAutomation().refreshChain());     // nothing moved since: nothing to announce
+            expect (macro->setName ("OTHER"));
+            expect (! macro->setName ("OTHER"));
+        }
+
+        beginTest ("a host reading a macro's name while it is renamed only ever sees a whole name");
+        {
+            pb::PluginProcessor processor;
+            processor.prepareToPlay (48000.0, 64);
+
+            auto* macro = parameterFor (processor, "macro/2");
+            const juce::String a ("ALPHA ALPHA ALPHA ALPHA"), b ("BETA");
+            macro->setName (a);
+
+            std::atomic<bool> stop { false };
+            std::atomic<int> torn { 0 };
+
+            std::thread host ([&]
+            {
+                while (! stop.load())
+                {
+                    const auto name = macro->getName (0);
+
+                    if (name != a && name != b)
+                        ++torn;
+                }
+            });
+
+            for (int i = 0; i < 20000; ++i)
+                macro->setName (i % 2 == 0 ? b : a);
+
+            stop = true;
+            host.join();
+            expectEquals (torn.load(), 0);
         }
 
         beginTest ("a full automation pass allocates nothing");
