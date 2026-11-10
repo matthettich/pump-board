@@ -1280,3 +1280,21 @@ clock ones also fail against a shared clock). `PumpBoardPlugin_VST3` built and l
 test target (GCC 13, LTO): 3568, 0 failed. **Not checked:** a real host (no bundle was loaded, so the wrapper's use of the
 bypass parameter and the removal of its own `byps` lane are from reading the JUCE source), two loaded plugin instances, the AU,
 macOS, and any sanitizer.
+
+## 2026-11-09 — three review findings in the plugin (branch fix/coderabbit-2026-11-09)
+- What: (1) `MidiClock::setHostTempoOwns` now forgets its last written tempo only when ownership actually changes; the
+  plugin calls it every block, so the 0.5 BPM threshold never applied and a steady clock with no host tempo wrote
+  `board/tempo` every beat and moved the change counter. (2) `PluginProcessor::beginStateRestore` sets the bypass under
+  `pendingLock`, the same lock that schedules the restore, so the timer cannot land a due restore in between and leave
+  the board bypassed with nothing pending. `landPendingState (bool force)` rechecks the due time under the lock for the
+  timer; `releaseResources` forces. (3) `PluginParameter::setName` is guarded by a `SpinLock` shared with `getName`, and
+  assigns only when the name differs (returns whether it did).
+- Conservative calls: a restore that arrives while another is being applied inherits the unbypass rather than the older
+  one undoing its fade. `setBoardBypassedQuietly` under `pendingLock` was checked: a lock-free registry write and an
+  atomic resync, nothing in it takes `pendingLock`. `getName` copies under the lock and trims outside it, and is not
+  called from the audio thread. The docstring-coverage request was skipped.
+- Tests: Debug 3684 -> 3704, Release 3568 -> 3588, 0 failed; `PumpBoardPlugin_VST3` builds. The two clock tests and the
+  parameter-name race test fail or crash against the old code. The restore tests pass against the old code too: the race
+  window is a few instructions wide and cannot be hit deterministically from a test, so they pin the surrounding
+  behaviour, not the race itself.
+- Not checked: a real host, a thread-sanitizer run, macOS.

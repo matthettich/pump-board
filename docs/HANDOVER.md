@@ -12,7 +12,7 @@ decision and deviation — read it before changing anything, it is where the tra
   mappings, and the app can be played: sixteen slots, eight macros, MIDI and key mappings, presets with
   program changes, and a measured round trip in Settings. What is left is hand-testing
   (`REVIEW_TEMPLATE.md`) and phases 5–7 (more pedals, custom pedals, the full skin).
-- **Tests:** 3684 expectations in Debug, 0 failing on the plugin branch (Linux; 3653 before the per-instance clock and host bypass changes; the figures below are main's own).
+- **Tests:** 3704 expectations in Debug, 0 failing on the plugin branch (Linux; 3684 before the 9 Nov clock-write, restore-bypass and parameter-name fixes, 3653 before the per-instance clock and host bypass changes; the figures below are main's own).
   Previous run on `main`: 8 Nov 2026 on this Mac, after a clean
   rebuild of all 256 targets with 0 warnings in `Source/` and `Tests/`; the 6 Nov cloud run on Linux
   agrees. That run also caught the one warning the incremental builds had been hiding.
@@ -382,9 +382,9 @@ dated entry at the end of `NOTES.md` first, it has every finding, fixed or left,
     override `processBlockBypassed`, and do not add a second bypass parameter. The wrapper's own extra `byps` lane no longer exists.
   - A parameter that points at a slot (`slot/N/on`) is re-pointed by `refreshChain()` at 30 Hz, not at the moment the
     chain changes.
-- **Verified on Linux, 9 Nov:** Debug suite 3684 expectations, 0 failed (3653 before the clock and bypass changes, 3580
+- **Verified on Linux, 9 Nov:** Debug suite 3704 expectations, 0 failed (3684 before the review fixes of 9 Nov, 3653 before the clock and bypass changes, 3580
   before main's audit was merged in); `PumpBoardPlugin_VST3` compiles and links in Debug (it yields `pump BOARD.vst3` with
-  `moduleinfo.json`). Release suite (`build-rel`, GCC 13, LTO) 3568 expectations, 0 failed — fewer than Debug because the allocation guard is Debug-only.
+  `moduleinfo.json`). Release suite (`build-rel`, GCC 13, LTO) 3588 expectations, 0 failed — fewer than Debug because the allocation guard is Debug-only.
 - **Not verified by anyone:** the bundle loading in any host; the AU (Linux has no target for it); the VST3 SDK validator
   (the submodule is empty without network); macOS builds of any of the review's commits (the last green CI run, 35, was on `2b19541`); editor drawing or
   interaction in a host; thread-sanitizer or address-sanitizer runs; two real instances in one host process (the per-instance clock
