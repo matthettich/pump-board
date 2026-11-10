@@ -141,10 +141,14 @@ bool MidiClock::observe (const juce::MidiBuffer& midi, int numSamples, Parameter
 
 void MidiClock::setHostTempoOwns (bool owns) noexcept
 {
-    hostOwnsTempo.store (owns, std::memory_order_relaxed);
+    // The plugin calls this on every block, so only a real change of owner may forget what this clock last wrote.
+    // Forgetting on every call reset `written` each block and the write threshold never applied: a steady clock
+    // wrote the tempo every beat, and each write moved the registry's change counter (review).
+    const bool changed = hostOwnsTempo.exchange (owns, std::memory_order_relaxed) != owns;
 
     // Forget what this clock last wrote, so a clock that takes the tempo back from a host is not silent just because
     // the number it measures happens to match. The flag itself survives reset(): it is a mode, not clock state.
-    forgetWritten.store (true, std::memory_order_release);
+    if (changed)
+        forgetWritten.store (true, std::memory_order_release);
 }
 } // namespace pb

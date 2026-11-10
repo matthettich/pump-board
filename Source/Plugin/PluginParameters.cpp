@@ -123,7 +123,16 @@ float PluginParameter::getValueForText (const juce::String& text) const
 
 juce::String PluginParameter::getName (int maximumStringLength) const
 {
-    return maximumStringLength > 0 ? currentName.substring (0, maximumStringLength) : currentName;
+    // A host reads this from threads of its own while the message thread may be renaming a macro, so the string is
+    // copied out under the lock and trimmed outside it. Never called from this plugin's audio thread.
+    juce::String name;
+
+    {
+        const juce::SpinLock::ScopedLockType lock (nameLock);
+        name = currentName;
+    }
+
+    return maximumStringLength > 0 ? name.substring (0, maximumStringLength) : name;
 }
 
 void PluginParameter::parameterGestureChanged (int, bool isStarting)
@@ -136,9 +145,16 @@ void PluginParameter::setRegistryIndex (int newIndex) noexcept
     index.store (newIndex, std::memory_order_relaxed);
 }
 
-void PluginParameter::setName (const juce::String& newName)
+bool PluginParameter::setName (const juce::String& newName)
 {
+    const juce::SpinLock::ScopedLockType lock (nameLock);
+
+    // The caller runs at 30 Hz and the name almost never changes: leave the string alone when it has not.
+    if (currentName == newName)
+        return false;
+
     currentName = newName;
+    return true;
 }
 
 void PluginParameter::pollRegistry()

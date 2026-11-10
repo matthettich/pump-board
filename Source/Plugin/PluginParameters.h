@@ -50,8 +50,9 @@ public:
     void setRegistryIndex (int newIndex) noexcept;
     int getRegistryIndex() const noexcept { return index.load (std::memory_order_relaxed); }
 
-    // Message thread only, and only for a macro whose name the user changed. Hosts read names from this thread.
-    void setName (const juce::String& newName);
+    // Message thread. Hosts read the name from threads of their own, so it is guarded; a name that has not changed is
+    // not assigned again. Returns true when the name changed.
+    bool setName (const juce::String& newName);
 
     // Message thread, ~30 Hz: a change that did not come through the host (a knob, a macro, a mapped footswitch) is
     // the one thing a host cannot see for itself, so it is told exactly once. The comparison is against the last
@@ -76,6 +77,7 @@ private:
     const float minValue, maxValue, defaultValue;
     const juce::String suffix;
 
+    mutable juce::SpinLock nameLock;     // guards currentName: hosts call getName from any thread
     juce::String currentName;
     std::atomic<int> index;
     std::atomic<float> lastPushed;

@@ -51,7 +51,7 @@ public:
 private:
     void timerCallback() override;
     void beginStateRestore (const juce::var& state);
-    void landPendingState();             // applies a waiting restore now; its fade is over, or there is no audio to fade
+    void landPendingState (bool force);  // applies a waiting restore if its fade is over; `force` ignores the due time (no audio to fade)
     void setBoardBypassedQuietly (bool); // the restore's own fade: not announced to the host
     void afterBoardRestored();
     void notifyHostOfChainChange();      // message thread, or handed to it when a host restores off-thread
