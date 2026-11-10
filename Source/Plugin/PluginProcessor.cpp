@@ -80,8 +80,8 @@ void PluginProcessor::releaseResources()
 
     // The timer was what would have landed a restore that is still waiting out its fade, and there is no audio left to
     // fade: land it now, or the board stays bypassed and the project's board is never applied until some later
-    // prepareToPlay.
-    landPendingState();
+    // prepareToPlay. Forced: there is no fade left to wait out, so the due time does not apply.
+    landPendingState (true);
 }
 
 void PluginProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
@@ -173,6 +173,11 @@ void PluginProcessor::beginStateRestore (const juce::var& state)
     // the board would never come back (review, PR #2).
     {
         // A host may restore from a thread of its own while the timer reads these on the message thread.
+        //
+        // The bypass is set under the same lock that schedules the restore. Outside it, the timer could land the
+        // restore that was already due in the gap, unbypass, and then this thread bypassed with nothing left pending:
+        // the board stayed bypassed for good (review). setBoardBypassedQuietly is a lock-free registry write and an
+        // atomic resync, and nothing it calls takes pendingLock, so it cannot deadlock here.
         const juce::ScopedLock lock (pendingLock);
 
         const bool alreadyWaiting = ! pendingState.isVoid();
@@ -181,12 +186,12 @@ void PluginProcessor::beginStateRestore (const juce::var& state)
 
         if (! alreadyWaiting)
             pendingStateUnbypass = ! session.isBoardBypassed();
-    }
 
-    setBoardBypassedQuietly (true);
+        setBoardBypassedQuietly (true);
+    }
 }
 
-void PluginProcessor::landPendingState()
+void PluginProcessor::landPendingState (bool force)
 {
     juce::var state;
     bool unbypass = false;
@@ -194,7 +199,9 @@ void PluginProcessor::landPendingState()
     {
         const juce::ScopedLock lock (pendingLock);
 
-        if (pendingState.isVoid())
+        // Rechecked here, under the lock: the timer decided "due" a moment ago, and a newer restore may have replaced
+        // the waiting one and pushed the due time out since. Only the deactivation path forces a landing.
+        if (pendingState.isVoid() || (! force && juce::Time::currentTimeMillis() < pendingStateDueMs))
             return;
 
         state = std::move (pendingState);
@@ -206,7 +213,16 @@ void PluginProcessor::landPendingState()
         afterBoardRestored();
 
     if (unbypass)
-        setBoardBypassedQuietly (false);
+    {
+        const juce::ScopedLock lock (pendingLock);
+
+        // A restore that arrived while this one was being applied bypassed the board again and saw it already
+        // bypassed, so it recorded "leave it bypassed". It inherits the unbypass instead of this one undoing its fade.
+        if (pendingState.isVoid())
+            setBoardBypassedQuietly (false);
+        else
+            pendingStateUnbypass = true;
+    }
 }
 
 void PluginProcessor::setBoardBypassedQuietly (bool bypassed)
@@ -246,14 +262,7 @@ void PluginProcessor::timerCallback()
         setLatencySamples (latency);
     }
 
-    {
-        const juce::ScopedLock lock (pendingLock);
-
-        if (pendingState.isVoid() || juce::Time::currentTimeMillis() < pendingStateDueMs)
-            return;
-    }
-
-    landPendingState();
+    landPendingState (false);
 }
 
 void PluginProcessor::afterBoardRestored()

@@ -2,6 +2,8 @@
 #include "Effects/EffectRegistry.h"
 #include "Presets/BoardSerializer.h"
 #include "Presets/BoardState.h"
+#include <atomic>
+#include <thread>
 #include <cstring>
 
 namespace
@@ -292,6 +294,87 @@ public:
             expectEquals (counter.changes, 0);
 
             bypass->removeListener (&counter);
+        }
+
+        beginTest ("a restore scheduled while an earlier one is due lands only after its own fade");
+        {
+            pb::PluginProcessor source;
+            source.getSession().getMacros().setName (5, "FIRST");
+            juce::MemoryBlock first;
+            source.getStateInformation (first);
+
+            source.getSession().getMacros().setName (5, "SECOND");
+            juce::MemoryBlock second;
+            source.getStateInformation (second);
+
+            pb::PluginProcessor live;
+            live.prepareToPlay (48000.0, 128);
+            live.setStateInformation (first.getData(), (int) first.getSize());
+
+            juce::Thread::sleep (60);                              // the first is now past its fade, but nothing ran
+            live.setStateInformation (second.getData(), (int) second.getSize());
+
+            // The timer must see the second restore's own deadline, not the first one's, and the board must stay
+            // bypassed until then.
+            juce::Timer::callPendingTimersSynchronously();
+            expect (live.getSession().isBoardBypassed());
+            expect (live.getSession().getMacros().getName (5) != "FIRST");
+
+            expect (pumpTimersUntil ([&live] { return ! live.getSession().isBoardBypassed(); }));
+            expectEquals (live.getSession().getMacros().getName (5), juce::String ("SECOND"));
+        }
+
+        beginTest ("deactivating lands a restore that is not yet due");
+        {
+            pb::PluginProcessor source;
+            source.getSession().getMacros().setName (6, "FORCED");
+            juce::MemoryBlock saved;
+            source.getStateInformation (saved);
+
+            pb::PluginProcessor live;
+            live.prepareToPlay (48000.0, 128);
+            live.setStateInformation (saved.getData(), (int) saved.getSize());
+            live.releaseResources();                               // well inside the 25 ms fade
+
+            expectEquals (live.getSession().getMacros().getName (6), juce::String ("FORCED"));
+            expect (! live.getSession().isBoardBypassed());
+        }
+
+        beginTest ("a host restoring from its own thread while the timer lands one never leaves the board bypassed");
+        {
+            pb::PluginProcessor source;
+            source.getSession().getMacros().setName (7, "STORM");
+            juce::MemoryBlock saved;
+            source.getStateInformation (saved);
+
+            pb::PluginProcessor live;
+            live.prepareToPlay (48000.0, 128);
+
+            std::atomic<bool> done { false };
+
+            std::thread host ([&]
+            {
+                for (int i = 0; i < 400; ++i)
+                {
+                    live.setStateInformation (saved.getData(), (int) saved.getSize());
+                    juce::Thread::sleep (1);
+                }
+
+                done = true;
+            });
+
+            while (! done.load())
+            {
+                juce::Timer::callPendingTimersSynchronously();
+                juce::Thread::sleep (1);
+            }
+
+            host.join();
+
+            // Nothing is pending after the last restore lands, so a board still bypassed here was bypassed by a
+            // restore that the timer had already finished with.
+            expect (pumpTimersUntil ([&live] { return ! live.getSession().isBoardBypassed(); }),
+                    "the board was left bypassed with no restore pending");
         }
     }
 
