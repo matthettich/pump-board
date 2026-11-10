@@ -61,7 +61,7 @@ public:
             tempo.defaultValue = 120.0f;
             const int tempoIndex = registry.add (tempo);
 
-            pb::clock::reset();
+            pb::MidiClock clock;
 
             int pos = 0;
 
@@ -73,12 +73,11 @@ public:
                     if ((pos + i) % 500 == 0)
                         midi.addEvent (juce::MidiMessage::midiClock(), i);
 
-                pb::clock::observe (midi, 64, registry, 48000.0, tempoIndex);
+                clock.observe (midi, 64, registry, 48000.0, tempoIndex);
                 pos += 64;
             }
 
             expectWithinAbsoluteError (registry.get (tempoIndex), 240.0f, 2.0f);
-            pb::clock::reset();
         }
 
         beginTest ("a system-exclusive message in the block is skipped, and the note after it still maps");
@@ -99,9 +98,9 @@ public:
             router.handle (midi);
             expectEquals (registry.get (toggle), 1.0f);
 
-            pb::clock::reset();
-            pb::clock::observe (midi, 64, registry, 48000.0);    // the clock reads the same block
-            expect (! pb::clock::isRunning());
+            pb::MidiClock clock;
+            clock.observe (midi, 64, registry, 48000.0);    // the clock reads the same block
+            expect (! clock.isRunning());
         }
 
         beginTest ("with no device running, retired chains are freed at once rather than never");

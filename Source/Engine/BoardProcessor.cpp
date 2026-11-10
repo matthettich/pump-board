@@ -190,7 +190,7 @@ void BoardProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiB
 
     // Card 5.32: a running MIDI clock moves `board/tempo`, here and before the tempo is handed to the pedals, so a
     // clock change reaches them on the same block. Allocation-free: the index is cached inside the clock.
-    pb::clock::observe (midi, buffer.getNumSamples(), registry, getSampleRate(), tempoIndex);
+    midiClock.observe (midi, buffer.getNumSamples(), registry, getSampleRate(), tempoIndex);
 
     // The board's tempo, handed to the pedals that follow it. Only when it changes, so a steady tempo is free.
     // The cast happens here and only here, on a tempo change rather than every block.

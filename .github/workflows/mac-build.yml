@@ -1,17 +1,22 @@
 # Builds pump BOARD for Apple silicon on every push to main and publishes the app as the "latest" release,
 # so there is always a build to download and try. Unsigned: first launch needs right-click > Open (see README).
+# Pull requests build and test the app but never publish it.
 name: Mac build
 
 on:
   push:
     branches: [main]
+  pull_request:
   workflow_dispatch:
 
+# Only the publish job needs a write token; the build and plugin jobs, and so everything a pull request runs, see
+# read only (review, PR #2).
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: mac-build
+  # Per ref, so a pull request cannot cancel a release build of main.
+  group: mac-build-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -21,8 +26,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: true          # JUCE and pump only; pump's own nested submodules are not needed
+          # Named rather than `submodules: true`: that recurses into the validator's SDK too, which this job never
+          # builds. The app needs JUCE and pump; pump's own nested submodules are not needed.
+          submodules: false
           fetch-depth: 1
+
+      - name: Submodules
+        run: git submodule update --init --recursive external/JUCE external/pump
 
       - name: Tools
         run: brew install ninja || true
@@ -35,13 +45,17 @@ jobs:
           set -o pipefail
           cmake --build build --target PumpBoard PumpBoardTests 2>&1 | tee build.log || {
             # Annotations are readable through the API even where the logs are not: send the errors there.
-            grep -E "error:|Error|FAILED" build.log | head -15 | while IFS= read -r line; do echo "::error title=build::${line}"; done
+            # Linker output does not say "error:" on the line that names the symbol, so the pattern covers the
+            # shapes clang and ld actually print. Annotations are readable through the API where logs are not.
+            grep -E "error:|Undefined symbols|referenced from|duplicate symbol|^ld: |Error|FAILED" build.log | head -20 | while IFS= read -r line; do echo "::error title=build::${line}"; done
             exit 1; }
 
       - name: Run tests
         run: |
           set -o pipefail                     # a failing suite must fail the build, not hide behind tail
-          report() { grep -E "!!!|FAILED|failed" tests.log | head -15 | while IFS= read -r line; do echo "::error title=tests::${line}"; done; tail -40 tests.log; }
+          # Name the case as well as the assertion. JUCE prints "Starting tests in: <case>" before each case and one
+          # "!!!" line per failed assertion, and a bare "Test 3 failed" says nothing without knowing the case.
+          report() { awk '/^Starting tests in/ { c = $0 } /!!!/ { print c " | " $0 }' tests.log | head -20 | while IFS= read -r line; do echo "::error title=tests::${line}"; done; grep -E "^[0-9]+ passed" tests.log | while IFS= read -r line; do echo "::error title=tests::${line}"; done; tail -40 tests.log; }
           ./build/PumpBoardTests_artefacts/Release/PumpBoardTests > tests.log 2>&1 || { report; exit 1; }
           tail -3 tests.log
           grep -q " 0 failed" tests.log || { report; exit 1; }
@@ -56,12 +70,214 @@ jobs:
           name: pump-BOARD-mac-arm64
           path: pump-BOARD-mac-arm64.zip
 
+  # Publishing is the only thing that needs a write token, so it is its own job. Keeping it out of the build job is
+  # what lets every pull request run with contents: read.
+  publish:
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: pump-BOARD-mac-arm64
+
       - name: Publish as the "latest" release
         env:
           GH_TOKEN: ${{ github.token }}
+          # Only the artifact is downloaded here, so there is no checkout and no git remote for gh to infer the
+          # repository from: without this, a push to main cannot create the release. (review, PR #2.)
+          GH_REPO: ${{ github.repository }}
         run: |
           gh release delete latest --yes --cleanup-tag || true
           gh release create latest pump-BOARD-mac-arm64.zip \
             --title "Latest build ($(date -u +%Y-%m-%d) ${GITHUB_SHA::7})" \
             --notes "Built from ${GITHUB_SHA} on Apple silicon (Release). Unsigned: right-click > Open the first time." \
+            --target "$GITHUB_SHA"
+
+  # Card 8.1: the plugin target is verified where it can actually be built. A separate job, so a plugin failure
+  # can never stop the app's release and "additional software" stays additional.
+  plugin:
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Submodules by hand rather than `submodules: true`: that recurses into the SDK, which then clones its
+          # GUI library and documentation, and this job builds neither. The three pieces the validator needs are
+          # named below instead.
+          submodules: false
+          fetch-depth: 1
+
+      - name: Submodules
+        run: |
+          set -e
+          git submodule update --init --recursive external/JUCE external/pump
+          git submodule update --init external/vst3-sdk
+          git -C external/vst3-sdk submodule update --init base pluginterfaces public.sdk
+
+      - name: Tools
+        run: brew install ninja || true
+
+      - name: Configure (Release)
+        run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build both formats
+        run: |
+          set -o pipefail
+          cmake --build build --target PumpBoardPlugin_VST3 PumpBoardPlugin_AU 2>&1 | tee plugin.log || {
+            grep -E "error:|Undefined symbols|referenced from|duplicate symbol|^ld: |Error|FAILED" plugin.log | head -20 | while IFS= read -r line; do echo "::error title=plugin build::${line}"; done
+            exit 1; }
+          # Do not trust the artefact layout: find what the build actually produced.
+          for kind in "pump BOARD.vst3" "pump BOARD.component"; do
+            found=$(find build/PumpBoardPlugin_artefacts -maxdepth 4 -name "$kind" | head -1)
+            test -n "$found" || { echo "::error title=plugin build::no $kind was produced"; exit 1; }
+            echo "built $found"
+          done
+
+      - name: Validate the AU
+        run: |
+          set -o pipefail
+          COMPONENT=$(find build/PumpBoardPlugin_artefacts -maxdepth 4 -name "pump BOARD.component" | head -1)
+          COMPONENTS="$HOME/Library/Audio/Plug-Ins/Components"
+          mkdir -p "$COMPONENTS"
+          rm -rf "$COMPONENTS/pump BOARD.component"
+          cp -R "$COMPONENT" "$COMPONENTS/"
+          # An ad-hoc signature is enough for the out-of-process AU host to load it here; distribution signing,
+          # notarisation and the VST3 validator are card 8.9.
+          codesign --force --sign - "$COMPONENTS/pump BOARD.component"
+          # What the bundle says it is. If these codes disagree with the auval line below, CMakeLists.txt is wrong and
+          # the message to look at is this one, not the one auval prints.
+          /usr/libexec/PlistBuddy -c "Print :AudioComponents" "$COMPONENTS/pump BOARD.component/Contents/Info.plist" || true
+          # A component copied into place a moment ago is not necessarily in the AudioComponent registry yet, and
+          # auval then reports "didn't find the component" for a plugin that is perfectly good. Force a rescan first.
+          killall -9 AudioComponentRegistrar 2>/dev/null || true
+          auval -a > /dev/null 2>&1 || true
+          # aumf: AU_MAIN_TYPE is a MusicEffect. Subtype and manufacturer are the plugin codes in CMakeLists.txt.
+          if ! auval -v aumf Pb01 Wake > auval.log 2>&1; then
+            sleep 3
+            if ! auval -v aumf Pb01 Wake > auval.log 2>&1; then
+              grep -E "FAILED|ERROR|Error|error|didn't find" auval.log | head -15 | while IFS= read -r line; do echo "::error title=auval::${line}"; done
+              echo '--- components the registry does know about:'
+              auval -a 2>&1 | head -40
+              tail -40 auval.log
+              exit 1
+            fi
+          fi
+          tail -5 auval.log
+
+      # Card 8.9: the AU has a validator that ships with the OS; VST3 has none here, so this checks the three files a
+      # host actually opens. A bundle whose moduleinfo.json is missing is not a build failure — it is a plugin some
+      # hosts list as nothing at all — which is why it is checked rather than assumed.
+      - name: Check the VST3 bundle
+        run: |
+          set -o pipefail
+          VST3=$(find build/PumpBoardPlugin_artefacts -maxdepth 4 -name "pump BOARD.vst3" | head -1)
+          for part in "Contents/MacOS/pump BOARD" "Contents/Info.plist" "Contents/Resources/moduleinfo.json"; do
+            test -e "$VST3/$part" || { echo "::error title=vst3::the bundle is missing $part"; exit 1; }
+          done
+          # What the host files it under, taken from the same manifest a host reads.
+          for word in "pump BOARD" wake Fx; do
+            grep -q "$word" "$VST3/Contents/Resources/moduleinfo.json" || { echo "::error title=vst3::moduleinfo does not say $word"; exit 1; }
+          done
+          file "$VST3/Contents/MacOS/pump BOARD"
+          echo '--- moduleinfo.json, first 300 bytes:'
+          head -c 300 "$VST3/Contents/Resources/moduleinfo.json"; echo
+
+      # Card 8.9: the strict validation. `auval` does this job for the Audio Unit and nothing did it for VST3, so a
+      # bundle could be unloadable, mismatched or unable to show its editor and the build stayed green. This is the
+      # VST3 SDK's own validator, built from the pinned submodule: the version that judges the bundle is the version
+      # in the repository's history, not whatever is newest on the day CI runs, and nothing is downloaded to build it.
+      - name: Build the validator
+        run: |
+          set -o pipefail
+          cmake -S tools/vst3-validator -B validator-build -G Ninja -DCMAKE_BUILD_TYPE=Release 2>&1 | tail -15
+          cmake --build validator-build 2>&1 | tee validator-build.log || {
+            # Same rule as the app's build step: the line that names the symbol does not say "error:", so the
+            # pattern covers what clang and ld actually print. Annotations are the only part of a run readable
+            # without a token, so the diagnosis has to travel in them.
+            grep -E "error:|FAILED|Undefined symbols|referenced from|duplicate symbol|^ld: |symbol\\(s\\) not found" validator-build.log | head -30 | while IFS= read -r line; do echo "::error title=validator build::${line}"; done
+            tail -30 validator-build.log
+            exit 1; }
+          # A validator that cannot pass its own tests would report failures for a good plugin, so prove it first.
+          ./validator-build/PumpBoardVst3Validator -selftest | tail -3
+
+      - name: Validate the VST3
+        run: |
+          set -o pipefail
+          VST3=$(find build/PumpBoardPlugin_artefacts -maxdepth 4 -name "pump BOARD.vst3" | head -1)
+          # Apple silicon will not load a binary that carries no signature at all; the same ad-hoc signature the AU
+          # step uses is enough for an in-process load by our own unsigned executable.
+          codesign --force --sign - "$VST3"
+          ./validator-build/PumpBoardVst3Validator "$VST3" > validator.log 2>&1 || {
+            grep -E "ERROR|FAILED|Failed|error" validator.log | head -25 | while IFS= read -r line; do echo "::error title=validator::${line}"; done
+            tail -40 validator.log
+            exit 1; }
+          echo "tests passed: $(grep -c 'Succeeded' validator.log)"
+          tail -5 validator.log
+
+      # Card 8.9: both formats in one zip with the note that says where they go. The app's zip is built by its own job
+      # and is not touched here: additional software, in its own archive, on its own release below.
+      - name: Package the plugin
+        run: |
+          set -o pipefail
+          STAGE="$GITHUB_WORKSPACE/plugin-package"
+          rm -rf "$STAGE"; mkdir -p "$STAGE"
+          VST3=$(find build/PumpBoardPlugin_artefacts -maxdepth 4 -name "pump BOARD.vst3" | head -1)
+          AU=$(find build/PumpBoardPlugin_artefacts -maxdepth 4 -name "pump BOARD.component" | head -1)
+          ditto "$VST3" "$STAGE/pump BOARD.vst3"
+          ditto "$AU" "$STAGE/pump BOARD.component"
+          cat > "$STAGE/WHERE TO PUT THESE.txt" <<'NOTE'
+          pump BOARD - the plugin build (VST3 and Audio Unit)
+          Apple silicon Mac, unsigned.
+
+          Put these where the Mac keeps plugins:
+
+            pump BOARD.vst3       ->  ~/Library/Audio/Plug-Ins/VST3
+            pump BOARD.component  ->  ~/Library/Audio/Plug-Ins/Components
+
+          Or in /Library/Audio/Plug-Ins/... to install it for every account on the Mac.
+
+          It is not signed, so the Mac may refuse to load it until the quarantine flag is gone. For each bundle,
+          in Terminal:
+
+            xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/VST3/"pump BOARD.vst3"
+            xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/Components/"pump BOARD.component"
+
+          This is additional software, not a replacement: the pump BOARD app is a separate download, and neither
+          overwrites the other. Boards saved in the app open here. The plugin keeps its board inside the project
+          that loaded it and never writes the app's working copy.
+          NOTE
+          # No --keepParent: the two bundles are the top level of the archive, which is what the note above describes.
+          ditto -c -k --sequesterRsrc "$STAGE" "$GITHUB_WORKSPACE/pump-BOARD-plugin-mac-arm64.zip"
+          unzip -l "$GITHUB_WORKSPACE/pump-BOARD-plugin-mac-arm64.zip" | tail -5
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pump-BOARD-plugin-mac-arm64
+          path: pump-BOARD-plugin-mac-arm64.zip
+
+  # Card 8.9: the plugin gets its own release, so the app's "latest" keeps exactly the one asset it has always had.
+  # Publishing is a write, so it is its own job and main only, like the app's.
+  publish-plugin:
+    needs: plugin
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: pump-BOARD-plugin-mac-arm64
+
+      - name: Publish as the "plugin-latest" release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release delete plugin-latest --yes --cleanup-tag || true
+          gh release create plugin-latest pump-BOARD-plugin-mac-arm64.zip \
+            --title "Latest plugin build ($(date -u +%Y-%m-%d) ${GITHUB_SHA::7})" \
+            --notes "pump BOARD as VST3 and AU, built from ${GITHUB_SHA} on Apple silicon. Unsigned: read WHERE TO PUT THESE.txt in the zip." \
             --target "$GITHUB_SHA"

@@ -152,6 +152,14 @@ void BoardModel::prepareAll()
     publish();
 }
 
+void BoardModel::prepareAllForHost (double sampleRate, int maximumBlockSize)
+{
+    for (auto& entry : entries)
+        entry.slot->prepare (sampleRate, maximumBlockSize);
+
+    publish();
+}
+
 bool BoardModel::insertEmpty (int index)
 {
     if ((int) entries.size() >= ChainSnapshot::kMaxSlots)

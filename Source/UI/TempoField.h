@@ -17,6 +17,10 @@ public:
     void mouseDrag (const juce::MouseEvent&) override;
     void mouseDoubleClick (const juce::MouseEvent&) override;
 
+    // Card 8.5: the plugin's tempo comes from the host, so the field only shows it. A host-driven field still shows
+    // the number (that is how you see the song's BPM has arrived); it just cannot be dragged or typed into.
+    void setEditable (bool shouldBeEditable);
+
 private:
     void timerCallback() override;
     float currentValue() const;
@@ -27,6 +31,7 @@ private:
     float dragStartValue = 120.0f;
     float dragStartY = 0.0f;
     float shown = -1.0f;            // what is painted; the timer repaints when the value moves elsewhere
+    bool editable = true;
     style::Theme theme;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (TempoField)

@@ -4,3 +4,6 @@
 [submodule "external/pump"]
 	path = external/pump
 	url = https://github.com/matthettich/pump
+[submodule "external/vst3-sdk"]
+	path = external/vst3-sdk
+	url = https://github.com/steinbergmedia/vst3sdk

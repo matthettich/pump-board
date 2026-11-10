@@ -38,25 +38,40 @@ void TempoField::setValue (float bpm)
     registry.set (tempoIndex, juce::jlimit (20.0f, 300.0f, bpm));   // the param clamps too; say it here as well
 }
 
+void TempoField::setEditable (bool shouldBeEditable)
+{
+    if (editable == shouldBeEditable)
+        return;
+
+    editable = shouldBeEditable;
+    setMouseCursor (editable ? juce::MouseCursor::UpDownResizeCursor : juce::MouseCursor::NormalCursor);
+    repaint();
+}
+
 void TempoField::paint (juce::Graphics& g)
 {
     const auto r = getLocalBounds().toFloat();
 
-    draw::keyBox (g, theme, r, false, false, juce::Colour(), 0.0f);
+    // A read-only field is filled with the panel colour instead of the paper: it is the same box, but it does not
+    // invite a drag that would do nothing.
+    draw::keyBox (g, theme, r, false, false, editable ? juce::Colour() : theme.panel2, 0.0f);
 
     draw::text (g, juce::String (juce::roundToInt (currentValue())) + " BPM", r.reduced (7.0f, 0.0f),
-                theme.ink, 10.5f, juce::Justification::centredLeft, true, 0.8f);
+                editable ? theme.ink : theme.ink2, 10.5f, juce::Justification::centredLeft, true, 0.8f);
 }
 
 void TempoField::mouseDown (const juce::MouseEvent& e)
 {
+    if (! editable)
+        return;
+
     dragStartValue = currentValue();
     dragStartY = e.position.y;
 }
 
 void TempoField::mouseDrag (const juce::MouseEvent& e)
 {
-    if (! e.mouseWasDraggedSinceMouseDown())
+    if (! editable || ! e.mouseWasDraggedSinceMouseDown())
         return;
 
     // Up is faster, three pixels to a beat: 20 to 300 fits in one comfortable pull.
@@ -65,7 +80,7 @@ void TempoField::mouseDrag (const juce::MouseEvent& e)
 
 void TempoField::mouseDoubleClick (const juce::MouseEvent&)
 {
-    if (tempoIndex == ParameterRegistry::kInvalid)
+    if (! editable || tempoIndex == ParameterRegistry::kInvalid)
         return;
 
     auto* window = new juce::AlertWindow ("Tempo", "Beats per minute (20 to 300):",

@@ -49,6 +49,30 @@ Every push to `main` builds the app on GitHub's Apple-silicon Macs and publishes
 `pump BOARD.app` anywhere. It is not signed, so the first launch needs **right-click → Open → Open** (or
 `xattr -dr com.apple.quarantine "pump BOARD.app"`). The workflow is `.github/workflows/mac-build.yml`.
 
+## Download the plugin
+
+The same push builds the same sources as a **VST3 and an Audio Unit** and publishes them as their own release:
+<https://github.com/matthettich/pump-board/releases/tag/plugin-latest>
+(`pump-BOARD-plugin-mac-arm64.zip`). Additional software, not a replacement: the app keeps its own bundle, its own
+data folder and its own release, and neither install touches the other.
+
+Unzip it and put the two bundles where the Mac looks for them:
+
+```bash
+cp -R "pump BOARD.vst3"      ~/Library/Audio/Plug-Ins/VST3/
+cp -R "pump BOARD.component" ~/Library/Audio/Plug-Ins/Components/
+xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/VST3/"pump BOARD.vst3"
+xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/Components/"pump BOARD.component"
+```
+
+Unsigned like the app, so the `xattr` lines are what stop macOS refusing to load it. The zip carries
+`WHERE TO PUT THESE.txt` with the same instructions. Boards saved in the app open in the plugin; a plugin instance
+keeps its board inside the project that loaded it and never writes the app's working copy.
+
+CI validates the Audio Unit with `auval`, checks the VST3 bundle for the files a host reads, and then loads the VST3
+with the format's own validator and runs its test suite over it — the strict check the plan asks for, built from a
+pinned copy in the repository rather than downloaded, so the validator that judges a build is always the same one.
+
 ## Run
 
 ```bash

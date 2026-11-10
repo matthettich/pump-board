@@ -84,6 +84,8 @@ file(GLOB_RECURSE PB_CORE_SOURCES CONFIGURE_DEPENDS
 
 # ---- Core library shared by the app and the tests ----
 add_library(PumpBoardCore STATIC ${PB_CORE_SOURCES} ${PUMP_DSP_SOURCES})
+# The plugin links this library into a bundle, so its objects must be position independent. Harmless for the app.
+set_target_properties(PumpBoardCore PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
 target_include_directories(PumpBoardCore PUBLIC Source ${PUMP_DSP_INCLUDES})
 target_link_libraries(PumpBoardCore
     PUBLIC
@@ -95,7 +97,9 @@ target_link_libraries(PumpBoardCore
 target_compile_definitions(PumpBoardCore PUBLIC
     JUCE_WEB_BROWSER=0
     JUCE_USE_CURL=0
-    JUCE_STANDALONE_APPLICATION=1
+    # JUCE_STANDALONE_APPLICATION deliberately does not live here: it is PUBLIC, so it would follow the core into
+    # the plugin and make the shared code think it is an app. juce_add_gui_app sets it for the app target itself,
+    # and juce_add_plugin sets it to JucePlugin_Build_Standalone for the plugin (card 8.1).
     $<$<CONFIG:Debug>:PB_ALLOCATION_GUARD=1>)
 
 # ---- Fonts (card 5.27) ----
@@ -117,17 +121,74 @@ juce_add_gui_app(PumpBoard
     MICROPHONE_PERMISSION_ENABLED TRUE
     MICROPHONE_PERMISSION_TEXT "pump BOARD needs audio input to process your instrument.")
 
-file(GLOB_RECURSE PB_APP_SOURCES CONFIGURE_DEPENDS Source/App/*.cpp Source/UI/*.cpp)
+# ---- UI (card 8.5) ----
+# The board's content is shared by the app window and the plugin editor, so it cannot live in the app target: this
+# links the core and the fonts, and nothing from Source/App. The device picker stays behind, because it is the one
+# panel that talks to AudioEngine, which a plugin does not have.
+file(GLOB_RECURSE PB_UI_SOURCES CONFIGURE_DEPENDS Source/UI/*.cpp)
+# The device picker is the one panel that talks to AudioEngine, so it is compiled into the app instead. A regex
+# rather than a full path: GLOB answers with absolute paths, and this does not care how the tree is mounted.
+list(FILTER PB_UI_SOURCES EXCLUDE REGEX "/SettingsView\\.cpp$")
+add_library(PumpBoardUI STATIC ${PB_UI_SOURCES})
+set_target_properties(PumpBoardUI PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
+target_link_libraries(PumpBoardUI PUBLIC PumpBoardCore PumpBoardFonts juce::juce_gui_extra)
+
+file(GLOB_RECURSE PB_APP_SOURCES CONFIGURE_DEPENDS Source/App/*.cpp Source/UI/SettingsView.cpp)
 target_sources(PumpBoard PRIVATE ${PB_APP_SOURCES})
-target_link_libraries(PumpBoard PRIVATE PumpBoardCore PumpBoardFonts juce::juce_gui_extra)
+target_link_libraries(PumpBoard PRIVATE PumpBoardUI PumpBoardFonts juce::juce_gui_extra)
 
 set(PB_FONT_LICENCES
     ${CMAKE_SOURCE_DIR}/external/pump/common/fonts/OFL-JetBrainsMono.txt)
 set_source_files_properties(${PB_FONT_LICENCES} PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
 target_sources(PumpBoard PRIVATE ${PB_FONT_LICENCES})
 
+# ---- Plugin (card 8.1) ----
+# A second set of artefacts from the same sources: VST3 and AU beside the app, never instead of it. Its own bundle
+# id, its own codes, its own bundle. It links the core and the fonts, and nothing from Source/App — that is where
+# START_JUCE_APPLICATION and the audio device live.
+juce_add_plugin(PumpBoardPlugin
+    PRODUCT_NAME "pump BOARD"
+    PLUGIN_NAME "pump BOARD"
+    COMPANY_NAME "wake"
+    BUNDLE_ID "xyz.matthettich.pumpboard.plugin"
+    PLUGIN_MANUFACTURER_CODE Wake
+    PLUGIN_CODE Pb01
+    DESCRIPTION "pump BOARD — sixteen pump pedals in series"
+    FORMATS VST3 AU                        # JUCE only creates the formats this platform can build
+    IS_SYNTH FALSE
+    NEEDS_MIDI_INPUT TRUE                  # footswitch, CC and clock mappings arrive from the host
+    NEEDS_MIDI_OUTPUT FALSE
+    IS_MIDI_EFFECT FALSE
+    EDITOR_WANTS_KEYBOARD_FOCUS TRUE       # card 8.5: computer-key mappings only work while the editor has focus
+    VST3_CATEGORIES Fx
+    # A MIDI-input effect is what JUCE picks for NEEDS_MIDI_INPUT: an AU host files the AU under MIDI-controlled
+    # effects. kAudioUnitType_Effect would put it in the plain effects list instead, at the cost of the MIDI the
+    # board's mappings need.
+    AU_MAIN_TYPE kAudioUnitType_MusicEffect
+    COPY_PLUGIN_AFTER_BUILD FALSE)
+
+# Card 8.2: the processor and its session live in a library the plugin and the tests both link. The entry point
+# does not: createPluginFilter belongs to the bundle, and a test binary has no host to hand it to.
+add_library(PumpBoardPluginSupport STATIC
+    Source/Plugin/PluginSession.cpp
+    Source/Plugin/PluginProcessor.cpp
+    Source/Plugin/PluginParameters.cpp
+    Source/Plugin/PluginEditor.cpp)
+set_target_properties(PumpBoardPluginSupport PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
+target_link_libraries(PumpBoardPluginSupport PUBLIC PumpBoardCore PumpBoardUI)
+
+target_sources(PumpBoardPlugin PRIVATE Source/Plugin/PluginEntry.cpp)
+target_link_libraries(PumpBoardPlugin PRIVATE PumpBoardPluginSupport PumpBoardFonts juce::juce_gui_extra)
+# The VST3 wrapper will not compile until a plugin says where it stands on VST2/VST3 parameter migration. Nothing is
+# released yet and this JUCE cannot build VST2 at all, which is the case the wrapper's own comment covers: ship VST3
+# only and turn the VST2 replacement mode off. Found in CI, not in a build here: the plugin job reports it as
+# "You may have a conflict with parameter automation between VST2 and VST3 versions of your plugin".
+target_compile_definitions(PumpBoardPlugin PRIVATE JUCE_VST3_CAN_REPLACE_VST2=0)
+
 # ---- Tests ----
 juce_add_console_app(PumpBoardTests PRODUCT_NAME "PumpBoardTests")
 file(GLOB_RECURSE PB_TEST_SOURCES CONFIGURE_DEPENDS Tests/*.cpp)
 target_sources(PumpBoardTests PRIVATE ${PB_TEST_SOURCES})
-target_link_libraries(PumpBoardTests PRIVATE PumpBoardCore)
+# Core is named once, through the support library's PUBLIC link: naming it here as well made the linker say
+# "ignoring duplicate libraries: 'libPumpBoardCore.a'" on every test link.
+target_link_libraries(PumpBoardTests PRIVATE PumpBoardPluginSupport)

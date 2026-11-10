@@ -26,7 +26,7 @@ void addTempo (pb::ParameterRegistry& registry)
 }
 
 // `intervalSamples` between clocks; 24 of them make one beat.
-void feed (pb::ParameterRegistry& registry, int intervalSamples, int blocks, int blockSize = 64, double rate = 48000.0)
+void feed (pb::MidiClock& clock, pb::ParameterRegistry& registry, int intervalSamples, int blocks, int blockSize = 64, double rate = 48000.0)
 {
     int pos = 0;
 
@@ -38,7 +38,7 @@ void feed (pb::ParameterRegistry& registry, int intervalSamples, int blocks, int
             if ((pos + i) % intervalSamples == 0)
                 midi.addEvent (juce::MidiMessage::midiClock(), i);
 
-        pb::clock::observe (midi, blockSize, registry, rate);
+        clock.observe (midi, blockSize, registry, rate);
         pos += blockSize;
     }
 }
@@ -57,40 +57,42 @@ public:
 
     void runTest() override
     {
+        pb::MidiClock clock;     // one per test run: the clock is per instance, not process-wide
+
         beginTest ("a 120 BPM clock sets the board's tempo");
         {
             pb::ParameterRegistry registry; addTempo (registry);
-            pb::clock::reset();
+            clock.reset();
 
             // 120 BPM at 48k: 24000 samples per beat, so a pulse every 1000 samples. Four beats is enough for the
             // smoothing to have settled on a value that is not the starting 120 by luck.
-            feed (registry, 1000, 3000);
+            feed (clock, registry, 1000, 3000);
 
-            expect (pb::clock::isRunning());
+            expect (clock.isRunning());
             expectWithinAbsoluteError (tempoOf (registry), 120.0f, 1.0f);
-            expectWithinAbsoluteError ((float) pb::clock::lastMeasuredBpm(), 120.0f, 1.0f);
+            expectWithinAbsoluteError ((float) clock.lastMeasuredBpm(), 120.0f, 1.0f);
         }
 
         beginTest ("a faster clock moves it, and a slower one too");
         {
             pb::ParameterRegistry registry; addTempo (registry);
-            pb::clock::reset();
+            clock.reset();
 
-            feed (registry, 500, 3000);                  // 60 BPM at 24 ppqn would be 2000; 500 is 240 BPM
+            feed (clock, registry, 500, 3000);                  // 60 BPM at 24 ppqn would be 2000; 500 is 240 BPM
             expectWithinAbsoluteError (tempoOf (registry), 240.0f, 2.0f);
 
             pb::ParameterRegistry second; addTempo (second);
-            pb::clock::reset();
-            feed (second, 1500, 4000);                   // 80 BPM
+            clock.reset();
+            feed (clock, second, 1500, 4000);                   // 80 BPM
             expectWithinAbsoluteError (tempoOf (second), 80.0f, 1.0f);
         }
 
         beginTest ("a clock faster than the board allows is clamped, not obeyed");
         {
             pb::ParameterRegistry registry; addTempo (registry);
-            pb::clock::reset();
+            clock.reset();
 
-            feed (registry, 40, 3000);                   // 3000 BPM
+            feed (clock, registry, 40, 3000);                   // 3000 BPM
 
             const float bpm = tempoOf (registry);
             expect (bpm <= 300.0f);
@@ -100,43 +102,43 @@ public:
         beginTest ("stop resets the clock but leaves the tempo alone");
         {
             pb::ParameterRegistry registry; addTempo (registry);
-            pb::clock::reset();
+            clock.reset();
 
-            feed (registry, 1000, 3000);
-            expect (pb::clock::isRunning());
+            feed (clock, registry, 1000, 3000);
+            expect (clock.isRunning());
 
             juce::MidiBuffer stop;
             stop.addEvent (juce::MidiMessage::midiStop(), 0);
-            pb::clock::observe (stop, 64, registry, 48000.0);
+            clock.observe (stop, 64, registry, 48000.0);
 
-            expect (! pb::clock::isRunning());
+            expect (! clock.isRunning());
             expectWithinAbsoluteError (tempoOf (registry), 120.0f, 1.0f);   // a stopped clock does not rewind
         }
 
         beginTest ("notes and CCs are not a tempo");
         {
             pb::ParameterRegistry registry; addTempo (registry);
-            pb::clock::reset();
+            clock.reset();
 
             for (int b = 0; b < 200; ++b)
             {
                 juce::MidiBuffer midi;
                 midi.addEvent (juce::MidiMessage::noteOn (1, 60, 0.8f), 0);
                 midi.addEvent (juce::MidiMessage::controllerEvent (1, 11, 64), 32);
-                pb::clock::observe (midi, 64, registry, 48000.0);
+                clock.observe (midi, 64, registry, 48000.0);
             }
 
-            expect (! pb::clock::isRunning());
+            expect (! clock.isRunning());
             expectWithinAbsoluteError (tempoOf (registry), 120.0f, 0.01f);
         }
 
         beginTest ("a second of silence between pulses restarts the beat instead of averaging it in");
         {
             pb::ParameterRegistry registry; addTempo (registry);
-            pb::clock::reset();
+            clock.reset();
 
-            feed (registry, 1000, 1000);                 // settle at 120
-            feed (registry, 48000, 2000);                // one pulse per second: not a tempo, a broken clock
+            feed (clock, registry, 1000, 1000);                 // settle at 120
+            feed (clock, registry, 48000, 2000);                // one pulse per second: not a tempo, a broken clock
 
             // Whatever it decides, it must stay inside the board's range and not explode.
             const float bpm = tempoOf (registry);
@@ -158,6 +160,100 @@ public:
 
     void runTest() override
     {
+        beginTest ("two instances fed different clock rates in alternation each measure their own tempo");
+        {
+            // Before the clock was per instance, both boards added their block lengths to one sample position and
+            // one set of beat counters, so alternating blocks between two clocks measured neither.
+            pb::ParameterRegistry registryA, registryB;
+            pb::MidiRouter routerA (registryA), routerB (registryB);
+            pb::BoardProcessor a (registryA, routerA), b (registryB, routerB);
+            a.prepareToPlay (48000.0, 64);
+            b.prepareToPlay (48000.0, 64);
+
+            juce::AudioBuffer<float> buffer (2, 64);
+            buffer.clear();
+
+            int pos = 0;
+
+            for (int block = 0; block < 4000; ++block)
+            {
+                juce::MidiBuffer midiA, midiB;
+
+                for (int i = 0; i < 64; ++i)
+                {
+                    if ((pos + i) % 1000 == 0) midiA.addEvent (juce::MidiMessage::midiClock(), i);   // 120 BPM
+                    if ((pos + i) % 500 == 0)  midiB.addEvent (juce::MidiMessage::midiClock(), i);   // 240 BPM
+                }
+
+                a.processBlock (buffer, midiA);
+                b.processBlock (buffer, midiB);
+                pos += 64;
+            }
+
+            expectWithinAbsoluteError ((float) a.getMidiClock().lastMeasuredBpm(), 120.0f, 1.0f);
+            expectWithinAbsoluteError ((float) b.getMidiClock().lastMeasuredBpm(), 240.0f, 2.0f);
+            expectWithinAbsoluteError (registryA.get (registryA.find ("board/tempo")), 120.0f, 1.0f);
+            expectWithinAbsoluteError (registryB.get (registryB.find ("board/tempo")), 240.0f, 2.0f);
+        }
+
+        beginTest ("a stop on one instance's clock leaves the other running");
+        {
+            pb::ParameterRegistry registryA, registryB;
+            pb::MidiRouter routerA (registryA), routerB (registryB);
+            pb::BoardProcessor a (registryA, routerA), b (registryB, routerB);
+            a.prepareToPlay (48000.0, 64);
+            b.prepareToPlay (48000.0, 64);
+
+            juce::AudioBuffer<float> buffer (2, 64);
+            buffer.clear();
+
+            juce::MidiBuffer start, stop;
+            start.addEvent (juce::MidiMessage::midiStart(), 0);
+            stop.addEvent (juce::MidiMessage::midiStop(), 0);
+
+            a.processBlock (buffer, start);
+            b.processBlock (buffer, start);
+            expect (a.getMidiClock().isRunning() && b.getMidiClock().isRunning());
+
+            a.processBlock (buffer, stop);
+            expect (! a.getMidiClock().isRunning());
+            expect (b.getMidiClock().isRunning());
+        }
+
+        beginTest ("host-owns on one instance does not stop the other instance's clock writing");
+        {
+            pb::ParameterRegistry registryA, registryB;
+            pb::MidiRouter routerA (registryA), routerB (registryB);
+            pb::BoardProcessor a (registryA, routerA), b (registryB, routerB);
+            a.prepareToPlay (48000.0, 64);
+            b.prepareToPlay (48000.0, 64);
+            a.getMidiClock().setHostTempoOwns (true);
+
+            juce::AudioBuffer<float> buffer (2, 64);
+            buffer.clear();
+
+            int pos = 0;
+
+            for (int block = 0; block < 4000; ++block)
+            {
+                juce::MidiBuffer midi;
+
+                for (int i = 0; i < 64; ++i)
+                    if ((pos + i) % 500 == 0)                    // 240 BPM, to both
+                        midi.addEvent (juce::MidiMessage::midiClock(), i);
+
+                juce::MidiBuffer copy (midi);
+                a.processBlock (buffer, midi);
+                b.processBlock (buffer, copy);
+                pos += 64;
+            }
+
+            // The host-owned instance still measures, but leaves its tempo where the host put it.
+            expectWithinAbsoluteError ((float) a.getMidiClock().lastMeasuredBpm(), 240.0f, 2.0f);
+            expectWithinAbsoluteError (registryA.get (registryA.find ("board/tempo")), 120.0f, 0.01f);
+            expectWithinAbsoluteError (registryB.get (registryB.find ("board/tempo")), 240.0f, 2.0f);
+        }
+
         beginTest ("a clock at the MIDI input moves the tempo and reaches a pedal");
         {
             pb::ParameterRegistry registry;
@@ -177,7 +273,7 @@ public:
             snapshot->count = 1;
             processor.publish (std::move (snapshot));
 
-            pb::clock::reset();
+            processor.getMidiClock().reset();
 
             juce::AudioBuffer<float> buffer (2, 64);
             buffer.clear();

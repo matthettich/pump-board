@@ -12,6 +12,10 @@ decision and deviation — read it before changing anything, it is where the tra
   mappings, and the app can be played: sixteen slots, eight macros, MIDI and key mappings, presets with
   program changes, and a measured round trip in Settings. What is left is hand-testing
   (`REVIEW_TEMPLATE.md`) and phases 5–7 (more pedals, custom pedals, the full skin).
+- **Tests:** 3704 expectations in Debug, 0 failing on the plugin branch (Linux; 3684 before the 9 Nov clock-write, restore-bypass and parameter-name fixes, 3653 before the per-instance clock and host bypass changes; the figures below are main's own).
+  Previous run on `main`: 8 Nov 2026 on this Mac, after a clean
+  rebuild of all 256 targets with 0 warnings in `Source/` and `Tests/`; the 6 Nov cloud run on Linux
+  agrees. That run also caught the one warning the incremental builds had been hiding.
 - **Tests:** 3289 expectations in Debug, 0 failing (Linux, 9 Nov 2026, after the audit in the last `NOTES.md` entry;
   3216 before it, and 73 of the 3289 are the new `AuditFixes` suite). The Mac run of 8 Nov (3216, a clean rebuild of
   all 256 targets with 0 warnings in `Source/` and `Tests/`) predates the audit's changes, so the Mac has not seen
@@ -59,7 +63,7 @@ BIN="build/PumpBoard_artefacts/Debug/pump BOARD.app/Contents/MacOS/pump BOARD"
 ```
 
 Read the PNGs; delete them afterwards. They are the only way to see the UI from a terminal — the test
-target does not link the UI sources.
+target links the shared UI library (through `PumpBoardPluginSupport`) but never constructs a window.
 
 ---
 
@@ -344,6 +348,50 @@ last `NOTES.md` entries. Left:
 7. **JUCE licence.** JUCE is AGPLv3 or commercial. Fine for personal use; if pump BOARD is ever sold or shipped
    closed-source, a commercial JUCE licence is needed.
 
+## The plugin build (phase 8) — state as of the 9 Nov 2026 review
+
+Branch `review/vst-fixes-2026-11-09` (local, not pushed) is `origin/freebuff/f5cfeea…` plus the review's commits (`git log 9bc193e..`); read the
+dated entry at the end of `NOTES.md` first, it has every finding, fixed or left, with the reason. `main` was not touched.
+
+- **What it is:** `PumpBoardPlugin` (VST3 + AU, `juce_add_plugin`) around `PluginProcessor`, which owns a `PluginSession`
+  (registry, routers, macros, `BoardProcessor`, `BoardModel`) and the 27 automatable parameters in `PluginParameters`
+  (`macro/0..7`, `board/bypass`, `board/inputTrim`, `board/outputTrim`, `slot/0..15/on`; by position, not by pedal). The
+  editor is `BoardContent`, the same component the app's window shows, with `HostServices` as the seam for what differs.
+  `PumpBoardPluginSupport` (the processor, session, parameters, editor) and `PumpBoardUI` are static libraries the tests
+  link, so the plugin's non-entry code is exercised by the suite; `PluginEntry.cpp` is the only file only the bundle has.
+- **State** is one JSON envelope (`format`, `version` 1, the board document as a string, tempo). A restore while audio
+  runs waits 25 ms behind the board bypass; a restore before `prepareToPlay` lands at once. Anything that will not read
+  is refused before the board is touched (`canRestoreState`, `getLastRestoreError` says why).
+- **Message-thread work that must not depend on the editor** lives in `PluginProcessor::timerCallback`: garbage
+  collection, `MacroBank::update()`, chain/parameter refresh, host notification, latency reporting, landing a waiting
+  restore. If you add something the editor's `BoardContent::timerCallback` does and the plugin needs while the window is
+  shut, it has to be added there too — that is how macros went dead in the first place.
+- **Landmines specific to the plugin:**
+  - **The MIDI clock is per instance** (since 9 Nov, owner-approved): `pb::MidiClock` is a member of `BoardProcessor`
+    (`getMidiClock()`), not process-wide state. Anything that wants the clock's state asks the processor it cares about;
+    `running`, the measured BPM and host-owns are atomics, the rest is audio-thread-only.
+  - `ParameterRegistry::set` bumps `changeCounter()`, which the editor reads as "board edited". Never write a value to the
+    registry every block unless it changed.
+  - The plugin must never write `~/Music/pump BOARD/current.board` or `settings`. The guard is `HostServices`
+    (`workingBoardFile()` invalid, `tempoEditable()` false) plus `hasWorkingCopy()` in `BoardContent`; keep new file
+    writes behind the same two checks. `Boards/` is shared with the app on purpose.
+  - `board/bypass` is both a user control and the restore's fade. The plugin adopts its own fade silently
+    (`setBoardBypassedQuietly`); an editor-initiated preset swap does not, so a host may record it as automation.
+  - **`board/bypass` is the host's own bypass parameter** (`getBypassParameter()`), so the wrapper calls `processBlock`
+    and never `processBlockBypassed`: a host bypass goes through the board's 10 ms fade and latency-matched dry ring. Do not
+    override `processBlockBypassed`, and do not add a second bypass parameter. The wrapper's own extra `byps` lane no longer exists.
+  - A parameter that points at a slot (`slot/N/on`) is re-pointed by `refreshChain()` at 30 Hz, not at the moment the
+    chain changes.
+- **Verified on Linux, 9 Nov:** Debug suite 3704 expectations, 0 failed (3684 before the review fixes of 9 Nov, 3653 before the clock and bypass changes, 3580
+  before main's audit was merged in); `PumpBoardPlugin_VST3` compiles and links in Debug (it yields `pump BOARD.vst3` with
+  `moduleinfo.json`). Release suite (`build-rel`, GCC 13, LTO) 3588 expectations, 0 failed — fewer than Debug because the allocation guard is Debug-only.
+- **Not verified by anyone:** the bundle loading in any host; the AU (Linux has no target for it); the VST3 SDK validator
+  (the submodule is empty without network); macOS builds of any of the review's commits (the last green CI run, 35, was on `2b19541`); editor drawing or
+  interaction in a host; thread-sanitizer or address-sanitizer runs; two real instances in one host process (the per-instance clock
+  is tested with two `BoardProcessor`s, not two loaded plugins); a host's bypass button driving `board/bypass` (the wrapper's rule was read, not run).
+- **Decisions still the owner's:** universal binary for the plugin (decision 4 in `docs/tasks/phase-8.md`; the build is
+  `arm64` only). (Per-instance clock state and the host bypass mapping were decided on 9 Nov and are done; see `NOTES.md`.)
+
 ## Building on Linux (cloud agents)
 
 The app is Mac-only, but the suite and the offscreen renders build on Linux for an agent without a Mac. JUCE's
@@ -354,6 +402,7 @@ cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS="-DJUCE_ALSA=
   -DJUCE_USE_XRANDR=0 -DJUCE_USE_XINERAMA=0 -DJUCE_USE_XCURSOR=0 -DJUCE_USE_XRENDER=0 -DJUCE_USE_XINPUT=0"
 cmake --build build --target PumpBoardTests && ./build/PumpBoardTests_artefacts/Debug/PumpBoardTests
 cmake --build build --target PumpBoard
+cmake --build build --target PumpBoardPlugin_VST3     # compiles and links the wrapper; there is no AU target on Linux
 xvfb-run -a "build/PumpBoard_artefacts/Debug/pump BOARD" --render-slots slots.png 1.5
 ```
 
@@ -387,8 +436,8 @@ judged on the Mac build.
   `prepare()`; clearing it changes the first milliseconds and the null test catches it at −62 dBFS.
 - **`SIGTERM` does not run destructors**, so killing the app cannot test the save-on-quit path. Use the
   debounced timer save when testing persistence.
-- **The test target links `PumpBoardCore` only** — no UI sources. UI is verified by render or by hand, never by
-  the suite.
+- **The test target links the core and, since phase 8, `PumpBoardUI` (through `PumpBoardPluginSupport`)**, but nothing in the
+  suite builds a window. UI is verified by render or by hand, never by the suite.
 - **Debug-only guarantees**: the allocation hooks and the ALLOC badge exist only with `PB_ALLOCATION_GUARD`.
   A Release-only allocation would go unseen.
 - **`board.xml` and `presets/` are different things**: `board.xml` is whatever you last had open, presets are
@@ -452,7 +501,7 @@ judged on the Mac build.
   `prepareToPlay` never did). Blocks are what age a retired chain, so without this a stopped device kept every old
   slot and its params for good.
 - **The audio thread never calls `getMessage()` on a message over three bytes** (it copies, and a SysEx heap-allocates)
-  and never calls `ParameterRegistry::find`: `pb::clock::observe` takes the tempo index from `BoardProcessor`.
+  and never calls `ParameterRegistry::find`: `MidiClock::observe` takes the tempo index from `BoardProcessor`.
 
 ## House rules
 

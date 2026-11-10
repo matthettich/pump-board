@@ -36,6 +36,11 @@ public:
     // (the board plays dry for a couple of blocks) so no slot is re-prepared under the audio thread.
     void prepareAll();
 
+    // Card 8.2: the caller already knows the audio thread is not running (a host's prepareToPlay, which the host
+    // must not call concurrently with processBlock). prepareAll() waits for two blocks, which is right for a device
+    // change mid-play and wrong here: a host preparing before playback would only be stalled for the timeout.
+    void prepareAllForHost (double sampleRate, int maximumBlockSize);
+
 private:
     void publish();
 
